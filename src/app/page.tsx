@@ -578,6 +578,7 @@ function POSView() {
   const [search, setSearch] = useState(''); const [cat, setCat] = useState('All');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isCheckout, setIsCheckout] = useState(false);
+  const [isTicketOpen, setIsTicketOpen] = useState(false);
   
   const [cName, setCName] = useState(''); const [cPhone, setCPhone] = useState('');
   const [bType, setBType] = useState<Order['billType']>('Dine-In'); 
@@ -694,9 +695,84 @@ function POSView() {
         </div>
       </div>
 
-      <div className={`fixed md:static inset-x-0 bottom-0 z-30 md:z-auto w-full bg-white dark:bg-slate-800 border-t md:border border-slate-200/60 dark:border-slate-700 rounded-t-2xl md:rounded-t-none md:rounded-4xl shadow-[0_-10px_40px_rgba(0,0,0,0.05)] md:soft-shadow flex flex-col transition-transform duration-300 ${cart.length === 0 ? 'translate-y-full md:translate-y-0' : isSearchFocused ? 'translate-y-[85%] md:translate-y-0 opacity-40 md:opacity-100 hover:opacity-100' : 'translate-y-0'} max-h-[70vh] md:max-h-none md:h-full md:overflow-y-auto md:custom-scroll`}>
-        <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mt-3 md:hidden"></div>
-        <div className="p-5 md:p-6 flex flex-col h-full overflow-y-auto">
+      {/* ===== MOBILE: Compact floating cart bar (visible when cart has items & ticket is collapsed) ===== */}
+      {cart.length > 0 && !isTicketOpen && (
+        <div className="fixed inset-x-0 bottom-0 z-30 md:hidden p-3 animate-slide-up">
+          <button
+            onClick={() => setIsTicketOpen(true)}
+            className="w-full flex items-center justify-between bg-violet-600 hover:bg-violet-700 text-white px-5 py-4 rounded-2xl shadow-xl shadow-violet-500/30 transition-all active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <ShoppingCart size={22} />
+                <span className="absolute -top-2 -right-2 w-5 h-5 bg-white text-violet-600 text-[10px] font-black rounded-full flex items-center justify-center shadow-sm">
+                  {cart.reduce((s: number, i: CartItem) => s + i.quantity, 0)}
+                </span>
+              </div>
+              <span className="font-bold text-sm">View Cart</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-black">₹{totals.tot.toFixed(0)}</span>
+              <ChevronRight size={20} strokeWidth={3} />
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* ===== MOBILE: Full ticket overlay (opens when user taps View Cart) ===== */}
+      {isTicketOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" onClick={() => setIsTicketOpen(false)}>
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+          <div className="absolute inset-x-0 bottom-0 bg-white dark:bg-slate-800 rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mt-3" />
+            <div className="p-5 flex flex-col h-full overflow-hidden">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-extrabold text-xl text-slate-800 dark:text-white flex items-center gap-2.5"><ShoppingCart className="text-violet-500"/> Ticket</h3>
+                <div className="flex items-center gap-2">
+                  {cart.length > 0 && <button onClick={clearCart} className="text-slate-400 hover:text-rose-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"><Trash2 size={14}/> Clear</button>}
+                  <button onClick={() => setIsTicketOpen(false)} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-xl text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"><X size={18}/></button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-3 hide-scrollbar pr-1 min-h-0">
+                {cart.map((item: CartItem) => (
+                  <div key={item.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                    <div className="flex-1 min-w-0 pr-3">
+                      <p className="font-semibold text-slate-800 dark:text-white text-sm truncate">{item.name}</p>
+                      <p className="text-[11px] font-medium text-slate-500 mt-1">₹{item.price}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden soft-shadow">
+                        <button onClick={() => removeFromCart(item.id)} className="w-9 h-9 flex justify-center items-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Minus size={14} strokeWidth={3}/></button>
+                        <span className="w-6 text-center font-bold text-sm">{item.quantity}</span>
+                        <button onClick={() => addToCart(item)} className="w-9 h-9 flex justify-center items-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Plus size={14} strokeWidth={3}/></button>
+                      </div>
+                      <div className="w-14 text-right font-bold text-slate-800 dark:text-white">₹{item.price * item.quantity}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-dashed border-slate-200 dark:border-slate-700 space-y-2 shrink-0">
+                <div className="flex justify-between text-sm font-medium text-slate-500"><span>Subtotal</span><span className="font-semibold text-slate-700 dark:text-slate-300">₹{totals.sub.toFixed(2)}</span></div>
+                <div className="flex justify-between text-sm font-medium text-slate-500"><span>Tax ({settings.gstPercentage}%)</span><span className="font-semibold text-slate-700 dark:text-slate-300">₹{totals.gst.toFixed(2)}</span></div>
+                <div className="flex justify-between items-end pt-2"><span className="text-sm font-bold text-slate-500">Total Due</span><span className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">₹{totals.tot.toFixed(0)}</span></div>
+                
+                <button 
+                  onClick={() => { setIsTicketOpen(false); setIsCheckout(true); }}
+                  className="w-full mt-3 font-bold text-lg py-4 rounded-2xl shadow-lg bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-violet-500/20 transition-all flex justify-center items-center gap-2 active:scale-[0.98]"
+                >
+                  Charge ₹{totals.tot.toFixed(0)} <ChevronRight strokeWidth={3}/>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== DESKTOP/TABLET: Static side ticket panel ===== */}
+      <div className="hidden md:flex md:flex-col bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-4xl soft-shadow h-full overflow-hidden">
+        <div className="p-6 flex flex-col h-full overflow-y-auto custom-scroll">
           <div className="flex justify-between items-center mb-5">
             <h3 className="font-extrabold text-xl text-slate-800 dark:text-white flex items-center gap-2.5"><ShoppingCart className="text-violet-500"/> Ticket</h3>
             {cart.length > 0 && <button onClick={clearCart} className="text-slate-400 hover:text-rose-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"><Trash2 size={14}/> Clear</button>}

@@ -35,7 +35,7 @@ jest.mock('../utils/cloudinary', () => ({
   uploadImage: jest.fn().mockResolvedValue('https://res.cloudinary.com/test/image.jpg'),
 }));
 
-describe('SmartPOS – Login', () => {
+describe('Hotel Vetri Vel – Login', () => {
   beforeEach(() => {
     localStorage.clear();
   });
@@ -43,7 +43,7 @@ describe('SmartPOS – Login', () => {
   it('renders the login screen when no user is stored', async () => {
     render(<Page />);
     await waitFor(() => {
-      expect(screen.getByText('SmartPOS Pro')).toBeInTheDocument();
+      expect(screen.getByText('Hotel Vetri Vel')).toBeInTheDocument();
     });
     expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
   });
@@ -79,7 +79,7 @@ describe('SmartPOS – Login', () => {
   });
 });
 
-describe('SmartPOS – POS View (authenticated)', () => {
+describe('Hotel Vetri Vel – POS View (authenticated)', () => {
   beforeEach(() => {
     // Pre-seed login so we skip the login screen
     localStorage.setItem('shbs_user', JSON.stringify({ username: 'admin', role: 'Admin' }));

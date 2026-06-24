@@ -16,7 +16,7 @@ export default function NotFound() {
           <div className="bg-gradient-to-br from-violet-500 to-indigo-600 p-3 rounded-2xl shadow-lg shadow-violet-500/30">
             <Activity size={28} className="text-white" />
           </div>
-          <span className="font-extrabold text-2xl text-white tracking-tight">SmartPOS Pro</span>
+          <span className="font-extrabold text-2xl text-white tracking-tight">Hotel Vetri Vel</span>
         </div>
 
         {/* Error code */}

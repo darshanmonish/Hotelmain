@@ -12,7 +12,7 @@ export default function MobileHeader() {
           {isMobileMenuOpen ? <X size={24} /> : <MenuIcon size={24} />}
         </button>
         <div className="flex items-center gap-2 text-violet-600 dark:text-violet-400">
-          <Activity size={22} /> <span className="font-extrabold text-lg tracking-tight text-slate-800 dark:text-white">SmartPOS</span>
+          <Activity size={22} /> <span className="font-extrabold text-lg tracking-tight text-slate-800 dark:text-white">Hotel Vetri Vel</span>
         </div>
       </div>
       <div className="flex items-center gap-3">

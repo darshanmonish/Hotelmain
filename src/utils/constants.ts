@@ -37,9 +37,9 @@ export const colorClasses: Record<StatColor, { bg: string, darkBg: string, text:
 
 export const defaultSettings: Settings = {
   id: 1,
-  hotelName: 'Grand Spice Restaurant',
-  address: '124, Culinary Avenue, Metro City, IN',
-  phone: '+91 9876543210',
+  hotelName: 'Hotel Vetri Vel',
+  address: 'No.87/92, VCV Road, R.S.Puram, Coimbatore - 641002',
+  phone: '9842999931, 9843999931',
   gstNumber: '33ABCDE1234F1Z5',
   gstPercentage: 5,
   footerMessage: 'Thank you for dining with us! Visit again.',

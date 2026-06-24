@@ -21,7 +21,7 @@ export default function LoginView() {
       <div className="w-full max-w-md bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-4xl soft-shadow p-8 md:p-10 border border-white/50 dark:border-slate-800 relative z-10 animate-pop-in">
         <div className="text-center mb-8">
           <div className="inline-flex bg-linear-to-br from-violet-500 to-indigo-600 text-white p-4 rounded-2xl shadow-lg shadow-violet-500/30 mb-5"><Activity size={32} /></div>
-          <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight">SmartPOS Pro</h2>
+          <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight">Hotel Vetri Vel</h2>
           <p className="text-sm font-medium text-slate-500 mt-2">Sign in to open your register</p>
         </div>
         <div className="mb-6 p-4 bg-violet-50 dark:bg-violet-500/10 border border-violet-100 dark:border-violet-500/20 rounded-2xl text-violet-800 dark:text-violet-300 text-sm">

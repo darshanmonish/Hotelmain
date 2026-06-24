@@ -10,7 +10,7 @@ type Dictionary = {
 
 const dictionary: Dictionary = {
   en: {
-    'login.title': 'SmartPOS Pro',
+    'login.title': 'Hotel Vetri Vel',
     'login.subtitle': 'Sign in to open your register',
     'login.username': 'Username',
     'login.password': 'Password',
@@ -26,7 +26,7 @@ const dictionary: Dictionary = {
     'header.signout': 'Sign Out',
   },
   es: {
-    'login.title': 'SmartPOS Pro',
+    'login.title': 'Hotel Vetri Vel',
     'login.subtitle': 'Inicie sesión para abrir su caja',
     'login.username': 'Usuario',
     'login.password': 'Contraseña',
@@ -42,7 +42,7 @@ const dictionary: Dictionary = {
     'header.signout': 'Cerrar Sesión',
   },
   fr: {
-    'login.title': 'SmartPOS Pro',
+    'login.title': 'Hotel Vetri Vel',
     'login.subtitle': 'Connectez-vous pour ouvrir la caisse',
     'login.username': 'Nom d\'utilisateur',
     'login.password': 'Mot de passe',
@@ -58,7 +58,7 @@ const dictionary: Dictionary = {
     'header.signout': 'Se Déconnecter',
   },
   ta: {
-    'login.title': 'SmartPOS Pro',
+    'login.title': 'Hotel Vetri Vel',
     'login.subtitle': 'உங்கள் கணக்கைத் திறக்க உள்நுழையவும்',
     'login.username': 'பயனர்பெயர்',
     'login.password': 'கடவுச்சொல்',

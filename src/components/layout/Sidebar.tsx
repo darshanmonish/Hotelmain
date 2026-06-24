@@ -21,7 +21,7 @@ export default function Sidebar() {
         <div className="p-6 hidden lg:flex items-center gap-3">
           <div className="bg-linear-to-br from-violet-500 to-indigo-600 text-white p-2.5 rounded-xl shadow-md"><Activity size={24} /></div>
           <div>
-            <h1 className="font-extrabold text-xl text-slate-800 dark:text-white leading-none tracking-tight">SmartPOS</h1>
+            <h1 className="font-extrabold text-xl text-slate-800 dark:text-white leading-none tracking-tight">Hotel Vetri Vel</h1>
             <p className="text-[11px] text-violet-600 dark:text-violet-400 font-semibold uppercase tracking-widest mt-1">Pro Edition</p>
           </div>
         </div>

@@ -23,7 +23,7 @@ export default function ForgotPasswordPage() {
           <div className="bg-gradient-to-br from-violet-500 to-indigo-600 p-2.5 rounded-xl shadow-lg shadow-violet-500/20">
             <Activity size={22} className="text-white" />
           </div>
-          <span className="font-extrabold text-lg text-white tracking-tight">SmartPOS Pro</span>
+          <span className="font-extrabold text-lg text-white tracking-tight">Hotel Vetri Vel</span>
         </div>
 
         {submitted ? (

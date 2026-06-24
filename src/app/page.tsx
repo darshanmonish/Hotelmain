@@ -42,14 +42,14 @@ export default function Page() {
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<Settings>({
     id: 1,
-    hotelName: 'Grand Spice Restaurant',
-    address: '124, Culinary Avenue, Metro City, IN',
-    phone: '+91 9876543210',
+    hotelName: 'Hotel Vetri Vel',
+    address: 'No.87/92, VCV Road, R.S.Puram, Coimbatore - 641002',
+    phone: '9842999931, 9843999931',
     gstNumber: '33ABCDE1234F1Z5',
     gstPercentage: 5,
     footerMessage: 'Thank you for dining with us! Visit again.',
     printFormat: 'thermal',
-    billCounter: 1003
+    billCounter: 1003,
   });
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -284,7 +284,7 @@ export default function Page() {
         <div className="bg-linear-to-br from-violet-500 to-indigo-600 text-white p-4 rounded-2xl shadow-lg">
           <Activity size={32} />
         </div>
-        <p className="text-sm font-semibold text-slate-500 animate-pulse">Loading SmartPOS…</p>
+        <p className="text-sm font-semibold text-slate-500 animate-pulse">Loading Hotel Vetri Vel…</p>
       </div>
     );
   }
@@ -333,7 +333,7 @@ function MobileHeader() {
           {isMobileMenuOpen ? <X size={24} /> : <MenuIcon size={24} />}
         </button>
         <div className="flex items-center gap-2 text-violet-600 dark:text-violet-400">
-          <Activity size={22} /> <span className="font-extrabold text-lg tracking-tight text-slate-800 dark:text-white">SmartPOS</span>
+          <Activity size={22} /> <span className="font-extrabold text-lg tracking-tight text-slate-800 dark:text-white">Hotel Vetri Vel</span>
         </div>
       </div>
       <div className="flex items-center gap-3">
@@ -387,7 +387,7 @@ function Sidebar() {
         <div className="p-6 hidden lg:flex items-center gap-3">
           <div className="bg-linear-to-br from-violet-500 to-indigo-600 text-white p-2.5 rounded-xl shadow-md"><Activity size={24} /></div>
           <div>
-            <h1 className="font-extrabold text-xl text-slate-800 dark:text-white leading-none tracking-tight">SmartPOS</h1>
+            <h1 className="font-extrabold text-xl text-slate-800 dark:text-white leading-none tracking-tight">Hotel Vetri Vel</h1>
             <p className="text-[11px] text-violet-600 dark:text-violet-400 font-semibold uppercase tracking-widest mt-1">Pro Edition</p>
           </div>
         </div>

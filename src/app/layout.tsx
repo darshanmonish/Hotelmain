@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SmartPOS Pro – Hotel & Restaurant Billing",
+  title: "Hotel Vetri Vel – Hotel & Restaurant Billing",
   description:
     "Powerful, real-time POS billing software for hotels and restaurants. Manage menu, orders, and receipts with ease.",
   openGraph: {
-    title: "SmartPOS Pro – Hotel & Restaurant Billing",
+    title: "Hotel Vetri Vel – Hotel & Restaurant Billing",
     description:
       "Powerful, real-time POS billing software for hotels and restaurants.",
     type: "website",

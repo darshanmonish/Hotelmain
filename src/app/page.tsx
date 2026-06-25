@@ -294,7 +294,7 @@ export default function Page() {
       <AppContext.Provider value={value}>
       <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-[#F8FAFC] text-slate-800'}`}>
         {user ? (
-          <div className="flex-1 flex flex-col lg:flex-row h-screen overflow-hidden print:block">
+          <div className="flex-1 flex flex-col lg:flex-row h-screen overflow-hidden print:hidden">
             <MobileHeader />
             <Sidebar />
             <main className="flex-1 overflow-y-auto print:overflow-visible custom-scroll pb-24 lg:pb-0">
@@ -1434,15 +1434,14 @@ function ReceiptPreviewModal() {
   if (!order) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center sm:p-8 bg-slate-900/60 backdrop-blur-sm print:p-0 print:bg-transparent print:block">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center sm:p-8 bg-slate-900/60 backdrop-blur-sm print:p-0 print:bg-transparent print:block print:absolute print:inset-auto print:h-auto print:w-full print:overflow-visible">
       <style>{`@media print { 
   @page { size: auto; margin: 0; } 
   body * { visibility: hidden !important; } 
   #print-area, #print-area * { visibility: visible !important; } 
   #print-area { 
-    position: absolute !important;
+    position: relative !important;
     left: 0 !important; 
-    right: 0 !important;
     top: 0 !important; 
     margin: 0 auto !important; 
     padding: 0 !important; 
@@ -1451,7 +1450,7 @@ function ReceiptPreviewModal() {
     box-shadow:none !important; 
   } 
 }`}</style>
-      <div className="bg-white dark:bg-slate-800 w-full max-w-4xl sm:rounded-[2.5rem] shadow-2xl border border-slate-200/60 dark:border-slate-700 overflow-hidden flex flex-col md:flex-row h-full sm:h-[90vh] print:h-auto print:border-none print:shadow-none animate-scale-up">
+      <div className="bg-white dark:bg-slate-800 w-full max-w-4xl sm:rounded-[2.5rem] shadow-2xl border border-slate-200/60 dark:border-slate-700 overflow-hidden flex flex-col md:flex-row h-full sm:h-[90vh] print:h-auto print:border-none print:shadow-none animate-scale-up print:overflow-visible">
         
         <div className="flex-1 p-6 md:p-10 overflow-y-auto print:p-0 custom-scroll bg-slate-50 dark:bg-slate-900">
           <div className="max-w-lg mx-auto flex justify-between items-center mb-6 print:hidden">
@@ -1470,9 +1469,9 @@ function ReceiptPreviewModal() {
                   <div className="flex justify-between"><span>{order.billType}</span><span>{order.time}</span></div>
                   <div className="mt-1">Client: {order.customerName}</div>
                 </div>
-                <table className="w-full text-left mt-3 border-b border-dashed border-black pb-3 block">
-                  <thead><tr className="border-b border-black text-[10px] flex pb-1 w-full"><th className="flex-1 font-bold">Item</th><th className="w-10 text-center font-bold">Qty</th><th className="w-16 text-right font-bold">Amt</th></tr></thead>
-                  <tbody className="flex flex-col mt-2 w-full gap-1.5">{order.items.map((i: CartItem) => (<tr key={i.id} className="flex text-[11px] items-center"><td className="flex-1 pr-2 font-bold">{i.name}</td><td className="w-10 text-center">{i.quantity}</td><td className="w-16 text-right font-bold">{(i.price*i.quantity).toFixed(0)}</td></tr>))}</tbody>
+                <table className="w-full text-left mt-3 border-b border-dashed border-black pb-3">
+                  <thead><tr className="border-b border-black text-[10px]"><th className="pb-1 font-bold">Item</th><th className="w-10 text-center font-bold pb-1">Qty</th><th className="w-16 text-right font-bold pb-1">Amt</th></tr></thead>
+                  <tbody>{order.items.map((i: CartItem) => (<tr key={i.id} className="text-[11px]"><td className="pr-2 font-bold py-1">{i.name}</td><td className="w-10 text-center py-1">{i.quantity}</td><td className="w-16 text-right font-bold py-1">{(i.price*i.quantity).toFixed(0)}</td></tr>))}</tbody>
                 </table>
                 <div className="py-3 border-b border-dashed border-black space-y-1.5">
                   <div className="flex justify-between text-[11px]"><span>Subtotal</span><span>{order.subtotal.toFixed(2)}</span></div><div className="flex justify-between text-[11px]"><span>GST ({settings.gstPercentage}%)</span><span>{order.gstAmount.toFixed(2)}</span></div>

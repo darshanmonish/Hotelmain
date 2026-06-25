@@ -30,6 +30,15 @@ export interface Order {
   total: number;
 }
 
+export interface ReceiptConfig {
+  showHotelName: boolean;
+  showAddress: boolean;
+  showPhone: boolean;
+  showGst: boolean;
+  alignHeader: 'left' | 'center' | 'right';
+  showGreeting: boolean;
+}
+
 export interface Settings {
   id: number;
   hotelName: string;
@@ -40,6 +49,7 @@ export interface Settings {
   footerMessage: string;
   printFormat: 'thermal' | 'a4' | 'kot';
   billCounter: number;
+  receiptConfig?: ReceiptConfig;
 }
 
 export interface User {

@@ -37,14 +37,22 @@ export const colorClasses: Record<StatColor, { bg: string, darkBg: string, text:
 
 export const defaultSettings: Settings = {
   id: 1,
-  hotelName: 'Hotel Vetri Vel',
-  address: 'No.87/92, VCV Road, R.S.Puram, Coimbatore - 641002',
-  phone: '9842999931, 9843999931',
+  hotelName: 'HOTEL VETRI VEL',
+  address: 'No.87/92, VCV Road, R.S.Puram, Coimbatore - 641002.',
+  phone: '+91 9842999931, +91 9843999931',
   gstNumber: '33ABCDE1234F1Z5',
   gstPercentage: 5,
   footerMessage: 'Thank you for dining with us! Visit again.',
   printFormat: 'thermal',
   billCounter: 1003,
+  receiptConfig: {
+    showHotelName: true,
+    showAddress: true,
+    showPhone: true,
+    showGst: true,
+    alignHeader: 'center',
+    showGreeting: true
+  }
 };
 
 export const defaultMenu: MenuItem[] = [

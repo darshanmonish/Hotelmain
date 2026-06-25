@@ -64,9 +64,9 @@ export default function ReceiptPreviewModal() {
                   <div className="flex justify-between"><span>{order.billType}</span><span>{order.time}</span></div>
                   <div className="mt-1">Client: {order.customerName}</div>
                 </div>
-                <table className="w-full text-left mt-3 border-b border-dashed border-black pb-3 block">
-                  <thead><tr className="border-b border-black text-[10px] flex pb-1 w-full"><th className="flex-1 font-bold">Item</th><th className="w-10 text-center font-bold">Qty</th><th className="w-16 text-right font-bold">Amt</th></tr></thead>
-                  <tbody className="flex flex-col mt-2 w-full gap-1.5">{order.items.map((i: CartItem) => (<tr key={i.id} className="flex text-[11px] items-center"><td className="flex-1 pr-2 font-bold">{i.name}</td><td className="w-10 text-center">{i.quantity}</td><td className="w-16 text-right font-bold">{(i.price*i.quantity).toFixed(0)}</td></tr>))}</tbody>
+                <table className="w-full text-left mt-3 border-b border-dashed border-black pb-3">
+                  <thead><tr className="border-b border-black text-[10px]"><th className="pb-1 font-bold">Item</th><th className="w-10 text-center font-bold pb-1">Qty</th><th className="w-16 text-right font-bold pb-1">Amt</th></tr></thead>
+                  <tbody>{order.items.map((i: CartItem) => (<tr key={i.id} className="text-[11px]"><td className="pr-2 font-bold py-1">{i.name}</td><td className="w-10 text-center py-1">{i.quantity}</td><td className="w-16 text-right font-bold py-1">{(i.price*i.quantity).toFixed(0)}</td></tr>))}</tbody>
                 </table>
                 <div className="py-3 border-b border-dashed border-black space-y-1.5">
                   <div className="flex justify-between text-[11px]"><span>Subtotal</span><span>{order.subtotal.toFixed(2)}</span></div><div className="flex justify-between text-[11px]"><span>GST ({settings.gstPercentage}%)</span><span>{order.gstAmount.toFixed(2)}</span></div>

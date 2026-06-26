@@ -12,6 +12,7 @@ import {
 
 import { supabase } from '@/utils/supabaseClient';
 import { uploadImage } from '@/utils/cloudinary';
+import { createPortal } from 'react-dom';
 import { AppContext, useAppContext } from '@/contexts/AppContext';
 import { I18nProvider, useI18n } from '@/contexts/I18nContext';
 
@@ -35,6 +36,19 @@ const getPastDate = (daysAgo: number) => {
 // ==========================================
 // 3. MAIN APP COMPONENT
 // ==========================================
+const getCategoryGradient = (cat: string) => {
+  const hash = cat.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const gradients = [
+    'from-rose-400 to-orange-300',
+    'from-blue-400 to-emerald-300',
+    'from-amber-300 to-orange-400',
+    'from-violet-400 to-fuchsia-300',
+    'from-cyan-400 to-blue-400',
+    'from-pink-400 to-rose-400'
+  ];
+  return gradients[hash % gradients.length];
+};
+
 export default function Page() {
   const [isMounted, setIsMounted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -42,7 +56,7 @@ export default function Page() {
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<Settings>({
     id: 1,
-    hotelName: 'Hotel Vetri Vel',
+    hotelName: 'Vetrivel Unavagam',
     address: 'No.87/92, VCV Road, R.S.Puram, Coimbatore - 641002',
     phone: '9842999931, 9843999931',
     gstNumber: '33ABCDE1234F1Z5',
@@ -192,9 +206,9 @@ export default function Page() {
   }, []);
 
   const deleteMenuItem = useCallback(async (id: string) => {
-    const { error } = await supabase.from('menu').delete().eq('id', id);
+    const { error } = await supabase.from('menu').update({ isDeleted: true }).eq('id', id);
     if (error) { console.error(error); throw new Error(error.message); }
-    setMenu(p => p.filter(i => i.id !== id));
+    setMenu(p => p.map(i => i.id === id ? { ...i, isDeleted: true } : i));
   }, []);
 
   const toggleAvailability = useCallback(async (id: string) => {
@@ -209,11 +223,19 @@ export default function Page() {
     }
   }, [menu, showToast]);
 
-  const addOrder = useCallback(async (orderData: OrderData) => {
-      // Use settings.billCounter from Supabase (persisted across sessions)
-      const currentCounter = settings.billCounter;
+  const addOrder = useCallback(async (orderData: OrderData, skipPrint = false) => {
+      const today = new Date().toISOString().split('T')[0];
+      let currentCounter = settings.billCounter;
+
+      // Reset bill counter to 1 if it is a new day
+      if (orders.length > 0 && orders[0].date !== today) {
+        currentCounter = 1;
+      } else if (orders.length === 0) {
+        currentCounter = 1;
+      }
+
       const billNo = `POS-${currentCounter}`;
-      const finalOrder: Omit<Order, 'id'> = { billNumber: billNo, date: new Date().toISOString().split('T')[0], time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), ...orderData };
+      const finalOrder: Omit<Order, 'id'> = { billNumber: billNo, date: today, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), ...orderData };
       
       const { data, error } = await supabase.from('orders').insert([finalOrder]).select();
 
@@ -228,11 +250,13 @@ export default function Page() {
         setSettings(prev => ({ ...prev, billCounter: newCounter }));
         setOrders(p => [newOrder, ...p]); 
         setCart([]);
-        setCurrentReceiptOrder(newOrder); 
-        setIsReceiptOpen(true); 
+        if (!skipPrint) {
+          setCurrentReceiptOrder(newOrder); 
+          setIsReceiptOpen(true); 
+        }
         showToast(`Bill ${billNo} Generated`, 'success');
       }
-  }, [settings, showToast]);
+  }, [settings, showToast, orders]);
 
   const addToCart = useCallback((item: MenuItem) => {
       setCart(p => {
@@ -249,8 +273,10 @@ export default function Page() {
   }, []);
 
   const clearCart = useCallback(() => { 
-      setCart([]); 
-      showToast('Cart Cleared', 'warning'); 
+      if (window.confirm("Are you sure you want to clear the cart?")) {
+        setCart([]); 
+        showToast('Cart Cleared', 'warning'); 
+      }
   }, [showToast]);
 
   const setActiveTab = useCallback((t: string) => {
@@ -574,6 +600,7 @@ function LoginView() {
 function POSView() {
   const context = useAppContext();
   const { menu, cart, addToCart, removeFromCart, clearCart, settings, addOrder, setActiveTab, showToast, addMenuItem } = context;
+  const { t } = useI18n();
 
   const [search, setSearch] = useState(''); const [cat, setCat] = useState('All');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -584,13 +611,14 @@ function POSView() {
   const [bType, setBType] = useState<Order['billType']>('Dine-In'); 
   const [pType, setPType] = useState<Order['paymentType']>('UPI');
 
-  const categories = useMemo(() => ['All', ...Array.from(new Set(menu.map((m: MenuItem) => m.category)))], [menu]);
-  const filteredMenu = useMemo(() => menu.filter((m: MenuItem) => m.name.toLowerCase().includes(search.toLowerCase()) && (cat === 'All' || m.category === cat)), [menu, search, cat]);
+  const activeMenu = useMemo(() => menu.filter((m: MenuItem) => !m.isDeleted), [menu]);
+  const categories = useMemo(() => ['All', ...Array.from(new Set(activeMenu.map((m: MenuItem) => m.category)))], [activeMenu]);
+  const filteredMenu = useMemo(() => activeMenu.filter((m: MenuItem) => m.name.toLowerCase().includes(search.toLowerCase()) && (cat === 'All' || m.category === cat)), [activeMenu, search, cat]);
   
   const totals = useMemo(() => {
     const sub = cart.reduce((s: number, i: CartItem) => s + (i.price * i.quantity), 0);
-    const gst = (sub * (settings.gstPercentage || 0)) / 100;
-    return { sub, gst, tot: sub + gst };
+    const gst = 0;
+    return { sub, gst, tot: sub };
   }, [cart, settings]);
 
   useEffect(() => {
@@ -602,9 +630,9 @@ function POSView() {
     return () => window.removeEventListener('keydown', handleKey);
   }, [cart, clearCart]);
 
-  const handleCheckout = (e: React.FormEvent) => {
+  const handleCheckout = (e: React.FormEvent, skipPrint = false) => {
     e.preventDefault(); if(!cart.length) return;
-    addOrder({ customerName: cName||'Walk-in', customerPhone: cPhone||'', billType: bType, paymentType: pType, items: cart, subtotal: totals.sub, gstAmount: totals.gst, total: totals.tot });
+    addOrder({ customerName: cName||'Walk-in', customerPhone: cPhone||'', billType: bType, paymentType: pType, items: cart, subtotal: totals.sub, gstAmount: totals.gst, total: totals.tot }, skipPrint);
     setCName(''); setCPhone(''); setIsCheckout(false);
   };
 
@@ -614,12 +642,12 @@ function POSView() {
         <div className="bg-[#F8FAFC]/90 dark:bg-slate-900/90 backdrop-blur-xl z-40 sticky top-0 pb-4">
           <div className="flex flex-col sm:flex-row justify-between gap-4 mb-4 pt-1">
             <div>
-              <h2 className="text-2xl font-extrabold text-slate-800 dark:text-white tracking-tight">Point of Sale</h2>
-              <p className="text-sm font-medium text-slate-500 hidden sm:block">Tap items to build the ticket</p>
+              <h2 className="text-2xl font-extrabold text-slate-800 dark:text-white tracking-tight">{t('pos.title')}</h2>
+              <p className="text-sm font-medium text-slate-500 hidden sm:block">{t('pos.subtitle')}</p>
             </div>
             <div className="relative w-full sm:w-80">
               <Search className="absolute left-4 top-3.5 text-slate-400" size={20} />
-              <input type="text" placeholder="Search menu..." value={search} onChange={e=>{setSearch(e.target.value); if(e.target.value) setCat('All');}} onFocus={()=>setIsSearchFocused(true)} onBlur={()=>setIsSearchFocused(false)} className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-2xl pl-12 pr-4 py-3 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 transition-all soft-shadow" />
+              <input type="text" placeholder={t('pos.search')} value={search} onChange={e=>{setSearch(e.target.value); if(e.target.value) setCat('All');}} onFocus={()=>setIsSearchFocused(true)} onBlur={()=>setIsSearchFocused(false)} className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-2xl pl-12 pr-4 py-3 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 transition-all soft-shadow" />
             </div>
           </div>
           <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-2 pt-1">
@@ -636,7 +664,11 @@ function POSView() {
             const qty = cart.find((c: CartItem) => c.id === item.id)?.quantity || 0;
             return (
               <div key={item.id} onClick={() => !qty && item.isAvailable && addToCart(item)} className={`relative p-5 rounded-3xl transition-all duration-200 flex flex-col justify-between h-44 select-none overflow-hidden ${!item.isAvailable ? 'opacity-50 grayscale cursor-not-allowed' : qty > 0 ? 'bg-violet-50 dark:bg-violet-900/20 border-2 border-violet-500 shadow-md shadow-violet-500/10' : 'bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 hover-scale cursor-pointer soft-shadow'}`}>
-                {item.imageUrl && <Image unoptimized src={item.imageUrl} alt={item.name} layout="fill" objectFit="cover" className="opacity-10 dark:opacity-20" />}
+                {item.imageUrl ? (
+                  <Image unoptimized src={item.imageUrl} alt={item.name} fill style={{ objectFit: 'cover' }} className="opacity-10 dark:opacity-20" />
+                ) : (
+                  <div className={`absolute inset-0 opacity-[0.04] dark:opacity-10 bg-linear-to-br ${getCategoryGradient(item.category)}`}></div>
+                )}
                 <div className="relative">
                   <div className="flex justify-between items-start mb-3">
                     <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${qty ? 'bg-violet-100 dark:bg-violet-800/50 text-violet-700 dark:text-violet-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>{item.category}</span>
@@ -709,7 +741,7 @@ function POSView() {
                   {cart.reduce((s: number, i: CartItem) => s + i.quantity, 0)}
                 </span>
               </div>
-              <span className="font-bold text-sm">View Cart</span>
+              <span className="font-bold text-sm">{t('pos.current_order')}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-lg font-black">₹{totals.tot.toFixed(0)}</span>
@@ -720,16 +752,16 @@ function POSView() {
       )}
 
       {/* ===== MOBILE: Full ticket overlay (opens when user taps View Cart) ===== */}
-      {isTicketOpen && (
-        <div className="fixed inset-0 z-50 md:hidden" onClick={() => setIsTicketOpen(false)}>
+      {isTicketOpen && createPortal(
+        <div className="fixed inset-0 z-[150] md:hidden" onClick={() => setIsTicketOpen(false)}>
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
           <div className="absolute inset-x-0 bottom-0 bg-white dark:bg-slate-800 rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col animate-slide-up" onClick={e => e.stopPropagation()}>
             <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mt-3" />
             <div className="p-5 flex flex-col h-full overflow-hidden">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="font-extrabold text-xl text-slate-800 dark:text-white flex items-center gap-2.5"><ShoppingCart className="text-violet-500"/> Ticket</h3>
+                <h3 className="font-extrabold text-xl text-slate-800 dark:text-white flex items-center gap-2.5"><ShoppingCart className="text-violet-500"/> {t('pos.current_order')}</h3>
                 <div className="flex items-center gap-2">
-                  {cart.length > 0 && <button onClick={clearCart} className="text-slate-400 hover:text-rose-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"><Trash2 size={14}/> Clear</button>}
+                  {cart.length > 0 && <button onClick={clearCart} className="text-slate-400 hover:text-rose-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"><Trash2 size={14}/> {t('pos.clear')}</button>}
                   <button onClick={() => setIsTicketOpen(false)} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-xl text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"><X size={18}/></button>
                 </div>
               </div>
@@ -754,28 +786,29 @@ function POSView() {
               </div>
 
               <div className="mt-4 pt-4 border-t border-dashed border-slate-200 dark:border-slate-700 space-y-2 shrink-0">
-                <div className="flex justify-between text-sm font-medium text-slate-500"><span>Subtotal</span><span className="font-semibold text-slate-700 dark:text-slate-300">₹{totals.sub.toFixed(2)}</span></div>
-                <div className="flex justify-between text-sm font-medium text-slate-500"><span>Tax ({settings.gstPercentage}%)</span><span className="font-semibold text-slate-700 dark:text-slate-300">₹{totals.gst.toFixed(2)}</span></div>
-                <div className="flex justify-between items-end pt-2"><span className="text-sm font-bold text-slate-500">Total Due</span><span className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">₹{totals.tot.toFixed(0)}</span></div>
+                <div className="flex justify-between text-sm font-medium text-slate-500"><span>{t('pos.subtotal')}</span><span className="font-semibold text-slate-700 dark:text-slate-300">₹{totals.sub.toFixed(2)}</span></div>
+
+                <div className="flex justify-between items-end pt-2"><span className="text-sm font-bold text-slate-500">{t('pos.total')}</span><span className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">₹{totals.tot.toFixed(0)}</span></div>
                 
                 <button 
                   onClick={() => { setIsTicketOpen(false); setIsCheckout(true); }}
                   className="w-full mt-3 font-bold text-lg py-4 rounded-2xl shadow-lg bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-violet-500/20 transition-all flex justify-center items-center gap-2 active:scale-[0.98]"
                 >
-                  Charge ₹{totals.tot.toFixed(0)} <ChevronRight strokeWidth={3}/>
+                  {t('pos.checkout')} ₹{totals.tot.toFixed(0)} <ChevronRight strokeWidth={3}/>
                 </button>
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ===== DESKTOP/TABLET: Static side ticket panel ===== */}
       <div className="hidden md:flex md:flex-col bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-4xl soft-shadow h-full overflow-hidden">
         <div className="p-6 flex flex-col h-full overflow-y-auto custom-scroll">
           <div className="flex justify-between items-center mb-5">
-            <h3 className="font-extrabold text-xl text-slate-800 dark:text-white flex items-center gap-2.5"><ShoppingCart className="text-violet-500"/> Ticket</h3>
-            {cart.length > 0 && <button onClick={clearCart} className="text-slate-400 hover:text-rose-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"><Trash2 size={14}/> Clear</button>}
+            <h3 className="font-extrabold text-xl text-slate-800 dark:text-white flex items-center gap-2.5"><ShoppingCart className="text-violet-500"/> {t('pos.current_order')}</h3>
+            {cart.length > 0 && <button onClick={clearCart} className="text-slate-400 hover:text-rose-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"><Trash2 size={14}/> {t('pos.clear')}</button>}
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-3 hide-scrollbar min-h-37.5 pr-1">
@@ -800,9 +833,9 @@ function POSView() {
           </div>
 
           <div className="mt-5 pt-5 border-t border-dashed border-slate-200 dark:border-slate-700 space-y-2.5">
-            <div className="flex justify-between text-sm font-medium text-slate-500"><span>Subtotal</span><span className="font-semibold text-slate-700 dark:text-slate-300">₹{totals.sub.toFixed(2)}</span></div>
-            <div className="flex justify-between text-sm font-medium text-slate-500"><span>Tax ({settings.gstPercentage}%)</span><span className="font-semibold text-slate-700 dark:text-slate-300">₹{totals.gst.toFixed(2)}</span></div>
-            <div className="flex justify-between items-end pt-3"><span className="text-sm font-bold text-slate-500 mb-1">Total Due</span><span className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">₹{totals.tot.toFixed(0)}</span></div>
+            <div className="flex justify-between text-sm font-medium text-slate-500"><span>{t('pos.subtotal')}</span><span className="font-semibold text-slate-700 dark:text-slate-300">₹{totals.sub.toFixed(2)}</span></div>
+
+            <div className="flex justify-between items-end pt-3"><span className="text-sm font-bold text-slate-500 mb-1">{t('pos.total')}</span><span className="text-3xl font-black text-slate-800 dark:text-white tracking-tight">₹{totals.tot.toFixed(0)}</span></div>
             
             <button 
               onClick={()=>setIsCheckout(true)} 
@@ -813,15 +846,15 @@ function POSView() {
                   ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed shadow-none' 
                   : 'bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-violet-500/20'}`}
             >
-              Charge ₹{totals.tot.toFixed(0)} <ChevronRight strokeWidth={3}/>
+              {t('pos.checkout')} ₹{totals.tot.toFixed(0)} <ChevronRight strokeWidth={3}/>
             </button>
             <p className="text-center text-[11px] font-semibold text-slate-400 uppercase tracking-widest mt-3 hidden md:block">Press F4 to Checkout</p>
           </div>
         </div>
       </div>
 
-      {isCheckout && (
-        <div className="fixed inset-0 z-100 flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-sm sm:p-4">
+      {isCheckout && createPortal(
+        <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-sm sm:p-4">
           <div className="bg-white dark:bg-slate-900 w-full max-w-lg sm:rounded-[2.5rem] rounded-t-4xl shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[90vh]">
             <div className="p-6 pb-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
               <div>
@@ -861,12 +894,23 @@ function POSView() {
               </form>
             </div>
             
-            <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-b-[2.5rem]">
+            <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-b-[2.5rem] flex gap-4">
+              <button 
+                type="button" 
+                onClick={(e) => handleCheckout(e as any, true)}
+                disabled={cart.length === 0}
+                className={`w-1/3 py-4 rounded-2xl font-bold text-lg shadow-xl flex justify-center items-center gap-2 transform active:scale-[0.98] transition-all 
+                  ${cart.length === 0 
+                    ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed shadow-none' 
+                    : 'bg-white dark:bg-slate-800 border-2 border-violet-600 text-violet-600 hover:bg-violet-50 dark:hover:bg-slate-700'}`}
+              >
+                Save Only
+              </button>
               <button 
                 type="submit" 
                 form="checkout" 
                 disabled={cart.length === 0}
-                className={`w-full py-4 rounded-2xl font-bold text-lg shadow-xl flex justify-center items-center gap-2 transform active:scale-[0.98] transition-all 
+                className={`w-2/3 py-4 rounded-2xl font-bold text-lg shadow-xl flex justify-center items-center gap-2 transform active:scale-[0.98] transition-all 
                   ${cart.length === 0 
                     ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed shadow-none' 
                     : 'bg-slate-900 dark:bg-violet-600 text-white hover:bg-slate-800 dark:hover:bg-violet-700'}`}
@@ -875,7 +919,8 @@ function POSView() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -927,7 +972,7 @@ function DashboardView() {
       { l: "Today's Gross", v: `₹${stats.revenue.toFixed(0)}`, i: Coins, c: 'violet', s: `${stats.ticketCount} tickets` },
       { l: "Total Tickets", v: stats.totalTicketCount, i: ShoppingCart, c: 'blue', s: "Lifetime" },
       { l: "Avg Ticket", v: `₹${stats.avgTicket.toFixed(0)}`, i: IndianRupee, c: 'amber', s: "Per order" },
-      { l: "Active Menu", v: menu.filter((m: MenuItem)=>m.isAvailable).length, i: Utensils, c: 'emerald', s: "Dishes listed" }
+      { l: "Active Menu", v: menu.filter((m: MenuItem)=>m.isAvailable && !m.isDeleted).length, i: Utensils, c: 'emerald', s: "Dishes listed" }
   ];
 
   return (
@@ -955,19 +1000,32 @@ function DashboardView() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2.5rem] border border-slate-200/60 dark:border-slate-700 soft-shadow lg:col-span-2 flex flex-col">
           <h3 className="font-bold text-xl text-slate-800 dark:text-white tracking-tight mb-8">7-Day Revenue Pulse</h3>
-          <div className="relative flex-1 min-h-62.5 flex items-end justify-between px-2 mt-auto">
-            {chartData.map((d: ChartData, i: number) => {
-              const h = d.total > 0 ? Math.max((d.total/maxRevenue)*100, 3) : 0;
-              return (
-                <div key={i} className="flex flex-col items-center flex-1 group relative">
-                  <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-xl whitespace-nowrap shadow-xl z-10 pointer-events-none">₹{d.total.toFixed(0)}</div>
-                  <div className="w-full max-w-14 bg-slate-50 dark:bg-slate-700/50 rounded-2xl h-50 flex items-end overflow-hidden p-1.5 border border-slate-100 dark:border-slate-700">
-                    {h > 0 && <div style={{height:`${h}%`, transitionDelay: `${i*50}ms`}} className={`w-full rounded-xl transition-all duration-300 shadow-sm ${d.isToday ? 'bg-linear-to-t from-violet-600 to-violet-400' : 'bg-linear-to-t from-violet-400/60 to-indigo-300/60 group-hover:from-violet-500'}`}></div>}
+          <div className="relative flex-1 flex mt-auto min-h-[280px]">
+            {/* Y-axis labels */}
+            <div className="flex flex-col justify-between text-[10px] font-bold text-slate-400 pb-10 pt-8 pr-4 border-r border-slate-100 dark:border-slate-700">
+               <span>₹{maxRevenue.toLocaleString('en-IN')}</span>
+               <span>₹{(maxRevenue / 2).toLocaleString('en-IN')}</span>
+               <span>₹0</span>
+            </div>
+            
+            {/* Bars */}
+            <div className="flex-1 flex items-end justify-between pl-2 sm:pl-4">
+              {chartData.map((d: ChartData, i: number) => {
+                const h = d.total > 0 ? Math.max((d.total/maxRevenue)*100, 3) : 0;
+                return (
+                  <div key={i} className="flex flex-col items-center flex-1 group relative">
+                    <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-xl whitespace-nowrap shadow-xl z-50 pointer-events-none">Exact: ₹{d.total.toLocaleString('en-IN')}</div>
+                    
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 mb-2">₹{d.total >= 1000 ? (d.total/1000).toFixed(1)+'k' : d.total}</span>
+                    
+                    <div className="w-full max-w-10 sm:max-w-14 bg-slate-50 dark:bg-slate-700/50 rounded-2xl h-50 flex items-end overflow-hidden p-1 sm:p-1.5 border border-slate-100 dark:border-slate-700">
+                      {h > 0 && <div style={{height:`${h}%`, transitionDelay: `${i*50}ms`}} className={`w-full rounded-xl transition-all duration-300 shadow-sm ${d.isToday ? 'bg-linear-to-t from-violet-600 to-violet-400' : 'bg-linear-to-t from-violet-400/60 to-indigo-300/60 group-hover:from-violet-500'}`}></div>}
+                    </div>
+                    <span className={`text-[10px] sm:text-xs font-semibold mt-4 ${d.isToday ? 'text-violet-600 dark:text-violet-400 font-bold' : 'text-slate-500'}`}>{d.day}</span>
                   </div>
-                  <span className={`text-xs font-semibold mt-4 ${d.isToday ? 'text-violet-600 dark:text-violet-400 font-bold' : 'text-slate-500'}`}>{d.day}</span>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -1014,7 +1072,10 @@ function OrdersView() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="relative md:col-span-2"><Search className="absolute left-4 top-3.5 text-slate-400" size={20}/><input type="text" placeholder="Search bills..." value={s} onChange={e=>setS(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-2xl pl-12 pr-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-violet-500 soft-shadow transition-all"/></div>
-        <input type="date" value={d} onChange={e=>setD(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-violet-500 soft-shadow transition-all"/>
+        <div className="relative flex items-center">
+          <input type="date" value={d} onChange={e=>setD(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-2xl pl-4 pr-10 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-violet-500 soft-shadow transition-all"/>
+          {d && <button onClick={()=>setD('')} className="absolute right-3 p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><X size={16}/></button>}
+        </div>
       </div>
       {/* Mobile card layout */}
       <div className="sm:hidden space-y-3">
@@ -1049,12 +1110,18 @@ function OrdersView() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
               {filtered.map((o: Order) => (
-                <tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
+                <tr 
+                  key={o.id} 
+                  className="hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors cursor-pointer group"
+                  onClick={()=>{setCurrentReceiptOrder(o);setIsReceiptOpen(true);}}
+                  onKeyDown={(e)=>{if(e.key==='Enter'){setCurrentReceiptOrder(o);setIsReceiptOpen(true);}}}
+                  tabIndex={0}
+                >
                   <td className="p-5"><p className="font-bold text-violet-600 dark:text-violet-400">{o.billNumber}</p><p className="text-[11px] font-medium text-slate-500 mt-1">{o.date} &bull; {o.time}</p></td>
                   <td className="p-5 font-semibold text-slate-800 dark:text-white">{o.customerName}</td>
                   <td className="p-5"><div className="flex gap-2"><span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg text-[10px] font-semibold uppercase">{o.billType}</span><span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg text-[10px] font-semibold uppercase">{o.paymentType}</span></div></td>
                   <td className="p-5 text-right font-bold text-lg text-slate-800 dark:text-white">₹{o.total.toFixed(0)}</td>
-                  <td className="p-5 text-center"><button onClick={()=>{setCurrentReceiptOrder(o);setIsReceiptOpen(true);}} className="bg-slate-50 border border-slate-200 dark:bg-slate-700 dark:border-slate-600 px-4 py-2 rounded-xl font-semibold text-sm text-slate-800 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors cursor-pointer flex items-center justify-center gap-2 mx-auto"><Printer size={16}/> Print</button></td>
+                  <td className="p-5 text-center"><button onClick={(e)=>{e.stopPropagation(); setCurrentReceiptOrder(o);setIsReceiptOpen(true);}} className="bg-slate-50 border border-slate-200 dark:bg-slate-700 dark:border-slate-600 px-4 py-2 rounded-xl font-semibold text-sm text-slate-800 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors cursor-pointer flex items-center justify-center gap-2 mx-auto group-hover:bg-slate-100 dark:group-hover:bg-slate-600"><Printer size={16}/> Print</button></td>
                 </tr>
               ))}
             </tbody>
@@ -1080,6 +1147,8 @@ function MenuView() {
   const [isModalOpen, setIsModalOpen] = useState(false); 
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null);
+  const [search, setSearch] = useState('');
+  const [cat, setCat] = useState('All');
   const [formState, setFormState] = useState<MenuFormState>({
     name: '', 
     price: '', 
@@ -1091,6 +1160,10 @@ function MenuView() {
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const activeMenu = useMemo(() => menu.filter((m: MenuItem) => !m.isDeleted), [menu]);
+  const categories = useMemo(() => ['All', ...Array.from(new Set(activeMenu.map((m: MenuItem) => m.category)))], [activeMenu]);
+  const filteredMenu = useMemo(() => activeMenu.filter((m: MenuItem) => m.name.toLowerCase().includes(search.toLowerCase()) && (cat === 'All' || m.category === cat)), [activeMenu, search, cat]);
 
   const openModal = (item: MenuItem | null = null) => {
     if (item) {
@@ -1194,35 +1267,50 @@ function MenuView() {
 
   return (
     <div className="space-y-6 animate-pop-in">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight">Menu Master</h2>
           <p className="text-sm font-medium text-slate-500 mt-1">Manage your food catalog and availability</p>
         </div>
-        <button onClick={()=>openModal()} className="bg-violet-600 text-white px-6 py-3.5 rounded-2xl font-bold text-sm shadow-lg shadow-violet-500/20 flex items-center gap-2 hover:bg-violet-700 hover:-translate-y-0.5 transition-all active:scale-95"><PlusCircle size={20}/> Add New Dish</button>
+        <button onClick={()=>openModal()} className="bg-violet-600 text-white px-6 py-3.5 rounded-2xl font-bold text-sm shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2 hover:bg-violet-700 hover:-translate-y-0.5 transition-all active:scale-95 shrink-0"><PlusCircle size={20}/> Add New Dish</button>
       </div>
 
-      {menu.length === 0 ? (
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-white dark:bg-slate-800 p-2 rounded-3xl border border-slate-200/60 dark:border-slate-700 soft-shadow">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="absolute left-4 top-3.5 text-slate-400" size={20} />
+          <input type="text" placeholder="Search dishes..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-2xl pl-12 pr-4 py-3 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500/20 transition-all" />
+        </div>
+        <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 px-2 pb-2 sm:pb-0">
+          <select value={cat} onChange={e=>setCat(e.target.value)} className="bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-sm font-semibold outline-none cursor-pointer text-slate-700 dark:text-slate-300">
+            {categories.map((c: string) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <div className="text-xs font-bold text-slate-400 whitespace-nowrap">Showing {filteredMenu.length} dishes</div>
+        </div>
+      </div>
+
+      {filteredMenu.length === 0 ? (
         <div className="py-24 flex flex-col items-center justify-center bg-white dark:bg-slate-800 rounded-[2.5rem] border-2 border-dashed border-slate-200 dark:border-slate-700 animate-pop-in">
           <div className="w-20 h-20 rounded-full bg-violet-50 dark:bg-violet-900/30 flex items-center justify-center mb-6">
             <Utensils size={40} className="text-violet-400" strokeWidth={1.5}/>
           </div>
-          <h3 className="text-2xl font-extrabold text-slate-800 dark:text-white mb-2">No dishes yet</h3>
-          <p className="text-slate-500 text-sm font-medium mb-8 max-w-xs text-center">Start building your menu by adding your first dish to the catalog.</p>
-          <button onClick={() => openModal()} className="bg-violet-600 text-white px-8 py-3.5 rounded-2xl font-bold text-sm hover:bg-violet-700 transition-all shadow-lg shadow-violet-500/20 flex items-center gap-2">
-            <PlusCircle size={18}/> Add Your First Dish
-          </button>
+          <h3 className="text-2xl font-extrabold text-slate-800 dark:text-white mb-2">{activeMenu.length === 0 ? 'No dishes yet' : 'No dishes found'}</h3>
+          <p className="text-slate-500 text-sm font-medium mb-8 max-w-xs text-center">{activeMenu.length === 0 ? 'Start building your menu by adding your first dish to the catalog.' : 'Try adjusting your search or category filter.'}</p>
+          {activeMenu.length === 0 && (
+            <button onClick={() => openModal()} className="bg-violet-600 text-white px-8 py-3.5 rounded-2xl font-bold text-sm hover:bg-violet-700 transition-all shadow-lg shadow-violet-500/20 flex items-center gap-2">
+              <PlusCircle size={18}/> Add Your First Dish
+            </button>
+          )}
         </div>
       ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-        {menu.map((i: MenuItem) => (
+        {filteredMenu.map((i: MenuItem) => (
           <div key={i.id} className={`bg-white dark:bg-slate-800 border ${i.isAvailable?'border-slate-200/60 dark:border-slate-700':'border-rose-100 dark:border-rose-900 opacity-70'} rounded-[2rem] overflow-hidden flex flex-col transition-all soft-shadow hover-scale group`}>
             <div className="relative h-40 bg-slate-100 dark:bg-slate-700/50 overflow-hidden">
               {i.imageUrl ? (
                 <Image unoptimized src={i.imageUrl} alt={i.name} fill className="object-cover group-hover:scale-110 transition-transform duration-500" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-300 dark:text-slate-600">
-                  <Utensils size={48} strokeWidth={1} />
+                <div className={`w-full h-full bg-linear-to-br ${getCategoryGradient(i.category)} flex items-center justify-center`}>
+                  <span className="font-black text-4xl text-white/50 tracking-tighter uppercase mix-blend-overlay">{i.name.substring(0,2)}</span>
                 </div>
               )}
               <div className="absolute top-4 left-4 flex gap-2">
@@ -1236,7 +1324,7 @@ function MenuView() {
 
             <div className="p-5 flex-1 flex flex-col">
               <h4 className="font-bold text-lg text-slate-800 dark:text-white leading-tight line-clamp-1 mb-1">{i.name}</h4>
-              <p className="text-xs font-medium text-slate-500 line-clamp-2 mb-4 h-8">{i.description || 'No description provided.'}</p>
+              <p className="text-xs font-medium text-slate-500 line-clamp-2 mb-4 h-8">{i.description || ''}</p>
               
               <div className="flex justify-between items-center mt-auto">
                 <p className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">₹{i.price}</p>
@@ -1251,9 +1339,9 @@ function MenuView() {
       </div>
       )}
 
-      {itemToDelete && (
+      {itemToDelete && createPortal(
         <div key="delete-modal" className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2.5rem] shadow-2xl p-8 animate-pop-in border border-slate-100 dark:border-slate-800">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2.5rem] shadow-2xl p-8 animate-pop-in border border-slate-100 dark:border-slate-800 max-h-[90vh] overflow-y-auto">
             <div className="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center text-rose-500 mb-6 mx-auto ring-8 ring-rose-50 dark:ring-rose-900/10">
               <Trash2 size={32} />
             </div>
@@ -1264,10 +1352,11 @@ function MenuView() {
               <button onClick={executeDelete} className="flex-1 py-4 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-2xl shadow-lg shadow-rose-500/20 transition-all active:scale-95">Delete</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {isModalOpen && (
+      {isModalOpen && createPortal(
         <div key="add-modal" className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-[2.5rem] shadow-2xl flex flex-col border border-slate-100 dark:border-slate-800 animate-pop-in" style={{maxHeight: '92vh'}}>
             <div className="p-5 sm:p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center shrink-0">
@@ -1363,7 +1452,8 @@ function MenuView() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -1380,6 +1470,13 @@ function SettingsView() {
 
   const handleSubmit = (e: React.FormEvent) => { 
       e.preventDefault(); 
+      if (formState.gstNumber) {
+        const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+        if (!gstRegex.test(formState.gstNumber)) {
+          context.showToast('Invalid GSTIN format', 'error');
+          return;
+        }
+      }
       updateSettings({...formState, gstPercentage:Number(formState.gstPercentage) || 0}); 
   };
 
@@ -1434,23 +1531,17 @@ function ReceiptPreviewModal() {
   if (!order) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center sm:p-8 bg-slate-900/60 backdrop-blur-sm print:p-0 print:bg-transparent print:block print:absolute print:inset-auto print:h-auto print:w-full print:overflow-visible">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center sm:p-8 bg-slate-900/60 backdrop-blur-sm print:p-0 print:bg-transparent print:block print:static print:inset-auto print:h-auto print:w-full print:overflow-visible">
       <style>{`@media print { 
   @page { size: auto; margin: 0; } 
-  body * { visibility: hidden !important; } 
-  #print-area, #print-area * { visibility: visible !important; } 
+  body { background: white !important; color: black !important; }
   #print-area { 
-    position: relative !important;
-    left: 0 !important; 
-    top: 0 !important; 
     margin: 0 auto !important; 
     padding: 0 !important; 
-    background: white !important; 
-    color: black !important; 
     box-shadow:none !important; 
   } 
 }`}</style>
-      <div className="bg-white dark:bg-slate-800 w-full max-w-4xl sm:rounded-[2.5rem] shadow-2xl border border-slate-200/60 dark:border-slate-700 overflow-hidden flex flex-col md:flex-row h-full sm:h-[90vh] print:h-auto print:border-none print:shadow-none animate-scale-up print:overflow-visible">
+      <div className="bg-white dark:bg-slate-800 w-full max-w-4xl sm:rounded-[2.5rem] shadow-2xl border border-slate-200/60 dark:border-slate-700 overflow-hidden flex flex-col md:flex-row h-full sm:h-[90vh] print:h-auto print:block print:border-none print:shadow-none animate-scale-up print:overflow-visible">
         
         <div className="flex-1 p-6 md:p-10 overflow-y-auto print:p-0 custom-scroll bg-slate-50 dark:bg-slate-900">
           <div className="max-w-lg mx-auto flex justify-between items-center mb-6 print:hidden">
@@ -1462,7 +1553,7 @@ function ReceiptPreviewModal() {
             {format === 'thermal' && (
               <div>
                 <div className="text-center pb-3 border-b border-dashed border-black">
-                  <h2 className="text-lg font-black uppercase tracking-tight">{settings.hotelName}</h2><p className="text-[10px]">{settings.address}</p><p className="text-[10px] font-bold mt-1">Tel: {settings.phone}</p><p className="text-[10px]">GSTIN: {settings.gstNumber}</p>
+                  <h2 className="text-2xl font-black uppercase tracking-tight">{settings.hotelName}</h2><p className="text-[10px]">{settings.address}</p><p className="text-[10px] font-bold mt-1">Tel: {settings.phone}</p>
                 </div>
                 <div className="py-3 border-b border-dashed border-black text-[11px] font-bold space-y-1">
                   <div className="flex justify-between"><span>Bill: {order.billNumber}</span><span>{order.date}</span></div>
@@ -1474,7 +1565,7 @@ function ReceiptPreviewModal() {
                   <tbody>{order.items.map((i: CartItem) => (<tr key={i.id} className="text-[11px]"><td className="pr-2 font-bold py-1">{i.name}</td><td className="w-10 text-center py-1">{i.quantity}</td><td className="w-16 text-right font-bold py-1">{(i.price*i.quantity).toFixed(0)}</td></tr>))}</tbody>
                 </table>
                 <div className="py-3 border-b border-dashed border-black space-y-1.5">
-                  <div className="flex justify-between text-[11px]"><span>Subtotal</span><span>{order.subtotal.toFixed(2)}</span></div><div className="flex justify-between text-[11px]"><span>GST ({settings.gstPercentage}%)</span><span>{order.gstAmount.toFixed(2)}</span></div>
+                  <div className="flex justify-between text-[11px]"><span>Subtotal</span><span>{order.subtotal.toFixed(2)}</span></div>
                   <div className="flex justify-between text-base font-black mt-2 pt-2 border-t border-dashed border-black"><span>TOTAL</span><span>₹{order.total.toFixed(0)}</span></div>
                 </div>
                 <div className="text-center pt-4 text-[10px] font-bold"><p>{settings.footerMessage}</p><p className="mt-1 opacity-70">Paid via {order.paymentType}</p></div>
@@ -1484,8 +1575,8 @@ function ReceiptPreviewModal() {
             {format === 'a4' && (
               <div>
                 <div className="flex justify-between border-b-4 border-slate-900 pb-6 mb-8">
-                  <div><h1 className="text-4xl font-black uppercase text-slate-900">{settings.hotelName}</h1><p className="text-slate-600 mt-2 max-w-sm">{settings.address}</p><p className="font-bold text-slate-800 mt-1">{settings.phone}</p></div>
-                  <div className="text-right"><h2 className="text-2xl font-black text-slate-400 uppercase tracking-widest mb-2">Invoice</h2><p className="font-bold text-slate-800">GSTIN: {settings.gstNumber}</p></div>
+                  <div><h1 className="text-5xl font-black uppercase text-slate-900">{settings.hotelName}</h1><p className="text-slate-600 mt-2 max-w-sm">{settings.address}</p><p className="font-bold text-slate-800 mt-1">{settings.phone}</p></div>
+                  <div className="text-right"><h2 className="text-2xl font-black text-slate-400 uppercase tracking-widest mb-2">Invoice</h2></div>
                 </div>
                 <div className="flex justify-between mb-8 bg-slate-50 p-6 rounded-xl border border-slate-200">
                   <div><p className="text-xs font-bold text-slate-400 uppercase mb-1">Billed To</p><p className="font-black text-lg">{order.customerName}</p><p className="text-slate-600">{order.customerPhone}</p><p className="font-bold mt-2 bg-white border border-slate-200 inline-block px-3 py-1 rounded-md text-xs">{order.billType}</p></div>
@@ -1495,7 +1586,7 @@ function ReceiptPreviewModal() {
                   <thead><tr className="bg-slate-900 text-white"><th className="p-4 font-bold rounded-tl-lg">Item</th><th className="p-4 font-bold text-center">Qty</th><th className="p-4 font-bold text-right">Price</th><th className="p-4 font-bold text-right rounded-tr-lg">Total</th></tr></thead>
                   <tbody>{order.items.map((i: CartItem,idx: number) => (<tr key={i.id} className="border-b border-slate-200"><td className="p-4 font-bold text-slate-800">{idx+1}. {i.name}</td><td className="p-4 text-center font-bold text-slate-600">{i.quantity}</td><td className="p-4 text-right text-slate-600">₹{i.price.toFixed(2)}</td><td className="p-4 text-right font-black text-slate-800">₹{(i.price*i.quantity).toFixed(2)}</td></tr>))}</tbody>
                 </table>
-                <div className="flex justify-end"><div className="w-80 bg-slate-50 p-6 rounded-xl border border-slate-200"><div className="flex justify-between py-2 text-slate-600 font-bold"><span>Subtotal</span><span>₹{order.subtotal.toFixed(2)}</span></div><div className="flex justify-between py-2 text-slate-600 font-bold"><span>Tax ({settings.gstPercentage}%)</span><span>₹{order.gstAmount.toFixed(2)}</span></div><div className="flex justify-between py-4 mt-2 border-t-2 border-slate-300 text-xl font-black text-slate-900"><span>Grand Total</span><span>₹{order.total.toFixed(2)}</span></div></div></div>
+                <div className="flex justify-end"><div className="w-80 bg-slate-50 p-6 rounded-xl border border-slate-200"><div className="flex justify-between py-2 text-slate-600 font-bold"><span>Subtotal</span><span>₹{order.subtotal.toFixed(2)}</span></div><div className="flex justify-between py-4 mt-2 border-t-2 border-slate-300 text-xl font-black text-slate-900"><span>Grand Total</span><span>₹{order.total.toFixed(2)}</span></div></div></div>
                 <div className="mt-20 pt-8 border-t border-slate-200 text-center text-slate-500 font-bold text-xs uppercase tracking-widest">{settings.footerMessage}</div>
               </div>
             )}

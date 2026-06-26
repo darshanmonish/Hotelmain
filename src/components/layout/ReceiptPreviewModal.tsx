@@ -28,24 +28,17 @@ export default function ReceiptPreviewModal() {
   if (!order) return null;
 
   return (
-    <div className="fixed inset-0 z-200 flex items-center justify-center sm:p-8 bg-slate-900/60 backdrop-blur-sm print:p-0 print:bg-transparent print:block">
+    <div className="fixed inset-0 z-200 flex items-center justify-center sm:p-8 bg-slate-900/60 backdrop-blur-sm print:p-0 print:bg-transparent print:block print:static print:inset-auto print:h-auto print:w-full print:overflow-visible">
       <style>{`@media print { 
   @page { size: auto; margin: 0; } 
-  body * { visibility: hidden !important; } 
-  #print-area, #print-area * { visibility: visible !important; } 
+  body { background: white !important; color: black !important; }
   #print-area { 
-    position: absolute !important;
-    left: 0 !important; 
-    right: 0 !important;
-    top: 0 !important; 
     margin: 0 auto !important; 
     padding: 0 !important; 
-    background: white !important; 
-    color: black !important; 
     box-shadow:none !important; 
   } 
 }`}</style>
-      <div className="bg-white dark:bg-slate-800 w-full max-w-4xl sm:rounded-[2.5rem] shadow-2xl border border-slate-200/60 dark:border-slate-700 overflow-hidden flex flex-col md:flex-row h-full sm:h-[90vh] print:h-auto print:border-none print:shadow-none animate-scale-up">
+      <div className="bg-white dark:bg-slate-800 w-full max-w-4xl sm:rounded-[2.5rem] shadow-2xl border border-slate-200/60 dark:border-slate-700 overflow-hidden flex flex-col md:flex-row h-full sm:h-[90vh] print:h-auto print:block print:border-none print:shadow-none animate-scale-up print:overflow-visible">
         
         <div className="flex-1 p-6 md:p-10 overflow-y-auto print:p-0 custom-scroll bg-slate-50 dark:bg-slate-900">
           <div className="max-w-lg mx-auto flex justify-between items-center mb-6 print:hidden">

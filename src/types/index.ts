@@ -9,6 +9,7 @@ export interface MenuItem {
   imageUrl?: string;
   description?: string;
   isVeg?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface CartItem extends MenuItem {
@@ -103,7 +104,7 @@ export interface AppContextType {
   deleteMenuItem: (id: string) => Promise<void>;
   toggleAvailability: (id: string) => void;
   orders: Order[];
-  addOrder: (orderData: OrderData) => void;
+  addOrder: (orderData: OrderData, skipPrint?: boolean) => void;
   cart: CartItem[];
   addToCart: (item: MenuItem) => void;
   removeFromCart: (id: string) => void;

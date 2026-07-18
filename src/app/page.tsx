@@ -206,9 +206,9 @@ export default function Page() {
   }, []);
 
   const deleteMenuItem = useCallback(async (id: string) => {
-    const { error } = await supabase.from('menu').update({ isDeleted: true }).eq('id', id);
+    const { error } = await supabase.from('menu').delete().eq('id', id);
     if (error) { console.error(error); throw new Error(error.message); }
-    setMenu(p => p.map(i => i.id === id ? { ...i, isDeleted: true } : i));
+    setMenu(p => p.filter(i => i.id !== id));
   }, []);
 
   const toggleAvailability = useCallback(async (id: string) => {

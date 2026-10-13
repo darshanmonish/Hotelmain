@@ -78,12 +78,12 @@ export default function POSView() {
                   <p className={`text-lg font-extrabold ${qty ? 'text-violet-700 dark:text-violet-400' : 'text-slate-800 dark:text-white'}`}>₹{item.price}</p>
                   {qty > 0 ? (
                     <div className="flex items-center bg-violet-600 text-white rounded-xl shadow-md overflow-hidden" onClick={e=>e.stopPropagation()}>
-                      <button onClick={()=>removeFromCart(item.id)} className="w-10 h-10 flex justify-center items-center hover:bg-violet-700 transition-colors"><Minus size={16} strokeWidth={3}/></button>
-                      <span className="w-6 text-center font-bold text-sm">{qty}</span>
-                      <button onClick={()=>addToCart(item)} className="w-10 h-10 flex justify-center items-center hover:bg-violet-700 transition-colors"><Plus size={16} strokeWidth={3}/></button>
+                      <button type="button" onClick={(e)=>{e.stopPropagation(); removeFromCart(item.id);}} className="w-10 h-10 flex justify-center items-center hover:bg-violet-700 transition-colors"><Minus size={16} strokeWidth={3}/></button>
+                      <span className="w-6 text-center font-bold text-sm select-none">{qty}</span>
+                      <button type="button" onClick={(e)=>{e.stopPropagation(); addToCart(item);}} className="w-10 h-10 flex justify-center items-center hover:bg-violet-700 transition-colors"><Plus size={16} strokeWidth={3}/></button>
                     </div>
                   ) : item.isAvailable && (
-                    <div className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 flex justify-center items-center text-slate-400 hover:bg-violet-100 hover:text-violet-600 hover:border-violet-200 transition-colors"><Plus size={18} strokeWidth={3}/></div>
+                    <button type="button" onClick={(e)=>{e.stopPropagation(); addToCart(item);}} className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 flex justify-center items-center text-slate-400 hover:bg-violet-100 hover:text-violet-600 hover:border-violet-200 transition-colors"><Plus size={18} strokeWidth={3}/></button>
                   )}
                 </div>
               </div>

@@ -16,6 +16,15 @@ export interface CartItem extends MenuItem {
   quantity: number;
 }
 
+export type TableStatus = 'empty' | 'occupied' | 'ready-to-bill';
+
+export interface TableSession {
+  tableNumber: number;
+  cart: CartItem[];
+  status: TableStatus;
+  openedAt?: string;
+}
+
 export interface Order {
   id: string;
   billNumber: string;
@@ -23,6 +32,7 @@ export interface Order {
   customerPhone: string;
   billType: 'Dine-In' | 'Parcel';
   paymentType: 'UPI' | 'Cash' | 'Card';
+  tableNumber?: number;
   date: string;
   time: string;
   items: CartItem[];
@@ -120,4 +130,8 @@ export interface AppContextType {
   setCurrentReceiptOrder: (o: Order | null) => void;
   isReceiptOpen: boolean;
   setIsReceiptOpen: (v: boolean) => void;
+  // Table management
+  tableSessions: Record<number, TableSession>;
+  activeTable: number | null;
+  setActiveTable: (n: number | null) => void;
 }

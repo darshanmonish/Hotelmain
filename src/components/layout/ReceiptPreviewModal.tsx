@@ -54,7 +54,7 @@ export default function ReceiptPreviewModal() {
                 </div>
                 <div className="py-3 border-b border-dashed border-black text-[11px] font-bold space-y-1">
                   <div className="flex justify-between"><span>Bill: {order.billNumber}</span><span>{order.date}</span></div>
-                  <div className="flex justify-between"><span>{order.billType}</span><span>{order.time}</span></div>
+                  <div className="flex justify-between"><span>{order.billType}{order.tableNumber ? ` (Table ${order.tableNumber})` : ''}</span><span>{order.time}</span></div>
                   <div className="mt-1">Client: {order.customerName}</div>
                 </div>
                 <table className="w-full text-left mt-3 border-b border-dashed border-black pb-3">
@@ -76,7 +76,7 @@ export default function ReceiptPreviewModal() {
                   <div className="text-right"><h2 className="text-2xl font-black text-slate-400 uppercase tracking-widest mb-2">Invoice</h2><p className="font-bold text-slate-800">GSTIN: {settings.gstNumber}</p></div>
                 </div>
                 <div className="flex justify-between mb-8 bg-slate-50 p-6 rounded-xl border border-slate-200">
-                  <div><p className="text-xs font-bold text-slate-400 uppercase mb-1">Billed To</p><p className="font-black text-lg">{order.customerName}</p><p className="text-slate-600">{order.customerPhone}</p><p className="font-bold mt-2 bg-white border border-slate-200 inline-block px-3 py-1 rounded-md text-xs">{order.billType}</p></div>
+                  <div><p className="text-xs font-bold text-slate-400 uppercase mb-1">Billed To</p><p className="font-black text-lg">{order.customerName}</p><p className="text-slate-600">{order.customerPhone}</p><p className="font-bold mt-2 bg-white border border-slate-200 inline-block px-3 py-1 rounded-md text-xs">{order.billType}{order.tableNumber ? ` - Table ${order.tableNumber}` : ''}</p></div>
                   <div className="text-right"><p className="text-xs font-bold text-slate-400 uppercase mb-1">Invoice Details</p><p className="font-black text-lg">{order.billNumber}</p><p className="text-slate-600">{order.date} &bull; {order.time}</p><p className="font-bold mt-2 bg-white border border-slate-200 inline-block px-3 py-1 rounded-md text-xs">{order.paymentType}</p></div>
                 </div>
                 <table className="w-full text-left border-collapse mb-8">
@@ -90,7 +90,7 @@ export default function ReceiptPreviewModal() {
 
             {format === 'kot' && (
               <div>
-                <div className="text-center pb-3 border-b-2 border-black"><h2 className="text-xl font-black uppercase">K.O.T</h2><p className="font-bold border-2 border-black inline-block px-3 py-1 mt-2 text-xs">{order.billType}</p></div>
+                <div className="text-center pb-3 border-b-2 border-black"><h2 className="text-xl font-black uppercase">K.O.T</h2><p className="font-bold border-2 border-black inline-block px-3 py-1 mt-2 text-xs">{order.billType}{order.tableNumber ? ` - Table ${order.tableNumber}` : ''}</p></div>
                 <div className="py-3 border-b-2 border-black text-[12px] font-bold"><div className="flex justify-between"><span>#{order.billNumber}</span><span>{order.time}</span></div><div className="mt-2 text-sm">Client: {order.customerName}</div></div>
                 <table className="w-full text-left mt-3">
                   <thead><tr className="border-b-2 border-black text-[12px]"><th className="pb-2">ITEM</th><th className="pb-2 text-right">QTY</th></tr></thead>

@@ -25,7 +25,7 @@ import type {
   TableSession
 } from '@/types';
 
-import { colorClasses } from '@/utils/constants';
+import { colorClasses, format12HourTime } from '@/utils/constants';
 
 // ==========================================
 // 2. CONTEXT & INITIAL DATA
@@ -354,7 +354,7 @@ export default function Page() {
       }
 
       const billNo = `POS-${currentCounter}`;
-      const finalOrder: Omit<Order, 'id'> = { billNumber: billNo, date: today, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), ...orderData };
+      const finalOrder: Omit<Order, 'id'> = { billNumber: billNo, date: today, time: new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12: true}), ...orderData };
       
       // Clean insert payload so undefined keys are never sent in PostgREST query
       const insertPayload: Record<string, any> = {};
@@ -1771,7 +1771,7 @@ function OrdersView() {
             <div className="flex justify-between items-start mb-3">
               <div>
                 <p className="font-bold text-violet-600 dark:text-violet-400">{o.billNumber}</p>
-                <p className="text-[11px] font-medium text-slate-500 mt-0.5">{o.date} &bull; {o.time}</p>
+                <p className="text-[11px] font-medium text-slate-500 mt-0.5">{o.date} &bull; {format12HourTime(o.time)}</p>
               </div>
               <p className="text-lg font-black text-slate-800 dark:text-white">₹{o.total.toFixed(0)}</p>
             </div>
@@ -1822,7 +1822,7 @@ function OrdersView() {
                   onKeyDown={(e)=>{if(e.key==='Enter'){setCurrentReceiptOrder(o);setIsReceiptOpen(true);}}}
                   tabIndex={0}
                 >
-                  <td className="p-5"><p className="font-bold text-violet-600 dark:text-violet-400">{o.billNumber}</p><p className="text-[11px] font-medium text-slate-500 mt-1">{o.date} &bull; {o.time}</p></td>
+                  <td className="p-5"><p className="font-bold text-violet-600 dark:text-violet-400">{o.billNumber}</p><p className="text-[11px] font-medium text-slate-500 mt-1">{o.date} &bull; {format12HourTime(o.time)}</p></td>
                   <td className="p-5 font-semibold text-slate-800 dark:text-white">{o.customerName}</td>
                   <td className="p-5"><div className="flex gap-2"><span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg text-[10px] font-semibold uppercase">{o.billType}</span>{o.tableNumber && (<span className="px-2.5 py-1 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 rounded-lg text-[10px] font-bold">Table {o.tableNumber}</span>)}<span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg text-[10px] font-semibold uppercase">{o.paymentType}</span></div></td>
                   <td className="p-5 text-right font-bold text-lg text-slate-800 dark:text-white">₹{o.total.toFixed(0)}</td>
@@ -1986,8 +1986,8 @@ function MenuView() {
   };
 
   return (
-    <div className="space-y-6 animate-pop-in">
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 animate-pop-in">
         <div>
           <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight">Menu Master</h2>
           <p className="text-sm font-medium text-slate-500 mt-1">Manage your food catalog and availability</p>
@@ -1995,16 +1995,48 @@ function MenuView() {
         <button onClick={()=>openModal()} className="bg-violet-600 text-white px-6 py-3.5 rounded-2xl font-bold text-sm shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2 hover:bg-violet-700 hover:-translate-y-0.5 transition-all active:scale-95 shrink-0"><PlusCircle size={20}/> Add New Dish</button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-white dark:bg-slate-800 p-2 rounded-3xl border border-slate-200/60 dark:border-slate-700 soft-shadow">
-        <div className="relative w-full sm:max-w-md">
-          <Search className="absolute left-4 top-3.5 text-slate-400" size={20} />
-          <input type="text" placeholder="Search dishes..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-2xl pl-12 pr-4 py-3 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500/20 transition-all" />
-        </div>
-        <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 px-2 pb-2 sm:pb-0">
-          <select value={cat} onChange={e=>setCat(e.target.value)} className="bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-sm font-semibold outline-none cursor-pointer text-slate-700 dark:text-slate-300">
-            {categories.map((c: string) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <div className="text-xs font-bold text-slate-400 whitespace-nowrap">Showing {filteredMenu.length} dishes</div>
+      {/* Sticky Search & Filter Bar - Follows the screen as you scroll anywhere in the catalog */}
+      <div className="sticky top-0 z-30 pt-1 pb-3 bg-[#F8FAFC]/95 dark:bg-slate-900/95 backdrop-blur-md transition-all">
+        <div className="flex flex-col sm:flex-row gap-3 justify-between items-center bg-white dark:bg-slate-800 p-2 sm:p-2.5 rounded-3xl border border-slate-200/80 dark:border-slate-700 shadow-md shadow-slate-900/5">
+          <div className="relative w-full sm:flex-1 max-w-lg">
+            <Search className="absolute left-4 top-3 text-slate-400" size={19} />
+            <input 
+              type="text" 
+              placeholder="Search dishes by name or category..." 
+              value={search} 
+              onChange={e=>setSearch(e.target.value)} 
+              className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-2xl pl-11 pr-10 py-2.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500/20 transition-all placeholder:text-slate-400" 
+            />
+            {search && (
+              <button 
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-2.5 p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                title="Clear search"
+              >
+                <X size={15}/>
+              </button>
+            )}
+          </div>
+          <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-2.5 px-2 pb-1 sm:pb-0">
+            <select 
+              value={cat} 
+              onChange={e=>setCat(e.target.value)} 
+              className="bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold outline-none cursor-pointer text-slate-700 dark:text-slate-300"
+            >
+              {categories.map((c: string) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <span className="text-xs font-bold text-slate-400 whitespace-nowrap bg-slate-100 dark:bg-slate-700/60 px-2.5 py-1.5 rounded-lg">
+              {filteredMenu.length} dishes
+            </span>
+            <button 
+              onClick={()=>openModal()} 
+              className="hidden lg:flex bg-violet-600 text-white px-3.5 py-2 rounded-xl font-bold text-xs shadow-md shadow-violet-500/20 items-center gap-1.5 hover:bg-violet-700 transition-all active:scale-95 shrink-0 cursor-pointer"
+              title="Add New Dish"
+            >
+              <PlusCircle size={15}/> Add Dish
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2821,7 +2853,7 @@ function ReceiptPreviewModal() {
 
                 {/* Bill Metadata Grid with High-Contrast Dark Text */}
                 <div className="text-sm sm:text-[14.5px] leading-relaxed">
-                  <div className="flex justify-between items-start gap-3">
+                  <div className="flex justify-between items-start gap-4 pr-6 sm:pr-8">
                     <div className="space-y-1">
                       <div className="flex gap-2">
                         <span className="font-semibold text-stone-800 w-16">Bill No:</span>
@@ -2843,14 +2875,14 @@ function ReceiptPreviewModal() {
                       </div>
                     </div>
 
-                    <div className="space-y-1 text-right">
-                      <div className="flex justify-end gap-2">
-                        <span className="font-semibold text-stone-800">Date:</span>
-                        <span className="font-bold text-black">{order.date}</span>
+                    <div className="space-y-1 shrink-0 text-left">
+                      <div className="flex gap-2">
+                        <span className="font-bold text-stone-900 w-12">Date:</span>
+                        <span className="font-extrabold text-black whitespace-nowrap">{order.date}</span>
                       </div>
-                      <div className="flex justify-end gap-2">
-                        <span className="font-semibold text-stone-800">Time:</span>
-                        <span className="font-bold text-black">{order.time}</span>
+                      <div className="flex gap-2">
+                        <span className="font-bold text-stone-900 w-12">Time:</span>
+                        <span className="font-extrabold text-black whitespace-nowrap">{format12HourTime(order.time)}</span>
                       </div>
                     </div>
                   </div>
@@ -2948,7 +2980,7 @@ function ReceiptPreviewModal() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-1">Invoice Details</p>
-                    <p className="font-bold text-stone-900">{order.date} &bull; {order.time}</p>
+                    <p className="font-bold text-stone-900">{order.date} &bull; {format12HourTime(order.time)}</p>
                     <p className="font-bold mt-2 bg-white border border-stone-300 inline-block px-3 py-1 rounded-md text-xs">
                       PAID VIA {order.paymentType}
                     </p>
@@ -3027,7 +3059,7 @@ function ReceiptPreviewModal() {
                 <div className="py-3 border-b-2 border-stone-900 text-xs font-bold">
                   <div className="flex justify-between">
                     <span>Order: #{order.billNumber}</span>
-                    <span>{order.time}</span>
+                    <span>{format12HourTime(order.time)}</span>
                   </div>
                   <div className="mt-1 text-sm font-black">
                     Table: {order.tableNumber ? `Table ${order.tableNumber} (Type ${String.fromCharCode(64 + order.tableNumber)})` : 'Counter'}

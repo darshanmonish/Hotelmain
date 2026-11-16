@@ -479,7 +479,7 @@ export default function ReceiptPreviewModal() {
 
                 {/* Bill Metadata Grid with High-Contrast Dark Text */}
                 <div className="text-sm sm:text-[14.5px] leading-relaxed">
-                  <div className="flex justify-between items-start gap-3">
+                  <div className="flex justify-between items-start gap-4 pr-6 sm:pr-8">
                     <div className="space-y-1">
                       <div className="flex gap-2">
                         <span className="font-semibold text-stone-800 w-16">Bill No:</span>
@@ -501,12 +501,14 @@ export default function ReceiptPreviewModal() {
                       </div>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap text-xs sm:text-[13.5px]">
-                        <span className="font-semibold text-stone-800">Date:</span>
-                        <span className="font-bold text-black">{order.date}</span>
-                        <span className="font-semibold text-stone-800 ml-1.5">Time:</span>
-                        <span className="font-bold text-black">{format12HourTime(order.time)}</span>
+                    <div className="space-y-1 shrink-0 text-left">
+                      <div className="flex gap-2">
+                        <span className="font-bold text-stone-900 w-12">Date:</span>
+                        <span className="font-extrabold text-black whitespace-nowrap">{order.date}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="font-bold text-stone-900 w-12">Time:</span>
+                        <span className="font-extrabold text-black whitespace-nowrap">{format12HourTime(order.time)}</span>
                       </div>
                     </div>
                   </div>

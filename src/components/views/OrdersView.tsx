@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Search, Download, Printer, Edit } from 'lucide-react';
 import { useAppContext } from '@/contexts/AppContext';
 import type { Order } from '@/types';
+import { format12HourTime } from '@/utils/constants';
 
 export default function OrdersView() {
   const { orders, setCurrentReceiptOrder, setIsReceiptOpen } = useAppContext();
@@ -40,7 +41,7 @@ export default function OrdersView() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
               {filtered.map((o: Order) => (
                 <tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
-                  <td className="p-5"><p className="font-bold text-violet-600 dark:text-violet-400">{o.billNumber}</p><p className="text-[11px] font-medium text-slate-500 mt-1">{o.date} &bull; {o.time}</p></td>
+                  <td className="p-5"><p className="font-bold text-violet-600 dark:text-violet-400">{o.billNumber}</p><p className="text-[11px] font-medium text-slate-500 mt-1">{o.date} &bull; {format12HourTime(o.time)}</p></td>
                   <td className="p-5 font-semibold text-slate-800 dark:text-white">{o.customerName}</td>
                   <td className="p-5"><div className="flex gap-2"><span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg text-[10px] font-semibold uppercase">{o.billType}</span><span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg text-[10px] font-semibold uppercase">{o.paymentType}</span></div></td>
                   <td className="p-5 text-right font-bold text-lg text-slate-800 dark:text-white">₹{o.total.toFixed(0)}</td>

@@ -14,14 +14,14 @@ import { supabase } from '@/utils/supabaseClient';
 import { uploadImage } from '@/utils/cloudinary';
 import { createPortal } from 'react-dom';
 import { AppContext, useAppContext } from '@/contexts/AppContext';
-import { I18nProvider, useI18n } from '@/contexts/I18nContext';
+import { I18nProvider, useI18n, type Language } from '@/contexts/I18nContext';
 
 // ==========================================
 // 1. TYPES & INTERFACES (imported from @/types)
 // ==========================================
 import type {
   MenuItem, CartItem, Order, Settings, User, Toast,
-  OrderData, StatColor, Stat, ChartData, TopSeller, AppContextType,
+  OrderData, Stat, ChartData, TopSeller, AppContextType,
   TableSession
 } from '@/types';
 
@@ -182,7 +182,7 @@ export default function Page() {
   const [activeTable, _setActiveTable] = useState<number | null>(null);
 
   // Derived: the active cart is whichever table is selected (or table 0 for Takeaway/Counter)
-  const cart = tableSessions[activeTable ?? 0]?.cart ?? [];
+  const cart = useMemo(() => tableSessions[activeTable ?? 0]?.cart ?? [], [tableSessions, activeTable]);
 
   const [activeTab, _setActiveTab] = useState('tables');
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -294,8 +294,10 @@ export default function Page() {
 
   const updateSettings = useCallback(async (ns: Settings) => {
     // Exclude id and billCounter from the update payload to avoid PK conflicts
-    const { id, billCounter: _bc, ...updatePayload } = ns;
-    const { error } = await supabase.from('settings').update(updatePayload).eq('id', id);
+    const updatePayload: Partial<Settings> = { ...ns };
+    delete updatePayload.id;
+    delete updatePayload.billCounter;
+    const { error } = await supabase.from('settings').update(updatePayload).eq('id', ns.id);
     if (error) {
       showToast('Error updating settings', 'error');
       console.error(error);
@@ -357,7 +359,7 @@ export default function Page() {
       const finalOrder: Omit<Order, 'id'> = { billNumber: billNo, date: today, time: new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12: true}), ...orderData };
       
       // Clean insert payload so undefined keys are never sent in PostgREST query
-      const insertPayload: Record<string, any> = {};
+      const insertPayload: Record<string, unknown> = {};
       for (const [key, val] of Object.entries(finalOrder)) {
         if (val !== undefined && val !== null) {
           insertPayload[key] = val;
@@ -369,11 +371,13 @@ export default function Page() {
       // If Supabase returned error 400 (e.g. column 'tableNumber' does not exist in Postgres DB table 'orders'):
       if (error && insertPayload.tableNumber !== undefined) {
         console.warn('Orders table missing tableNumber column in Supabase, retrying without it:', error);
-        const { tableNumber: _ignored, ...payloadWithoutTable } = insertPayload;
+        const payloadWithoutTable = { ...insertPayload };
+        delete payloadWithoutTable.tableNumber;
         
         // Append table number to customerName if it was a table order so cashier doesn't lose the table reference:
-        if (orderData.tableNumber && !payloadWithoutTable.customerName?.includes('Table')) {
-          payloadWithoutTable.customerName = `${payloadWithoutTable.customerName || 'Walk-in'} (Table ${orderData.tableNumber})`;
+        if (orderData.tableNumber && typeof payloadWithoutTable.customerName === 'string' && !payloadWithoutTable.customerName.includes('Table')) {
+          const baseName = payloadWithoutTable.customerName !== 'Walk-in' ? payloadWithoutTable.customerName.trim() : '';
+          payloadWithoutTable.customerName = baseName ? `${baseName} (Table ${orderData.tableNumber})` : `Table ${orderData.tableNumber}`;
         }
         
         const retry = await supabase.from('orders').insert([payloadWithoutTable]).select();
@@ -411,7 +415,7 @@ export default function Page() {
 
   const updateOrder = useCallback(async (updatedOrder: Order) => {
     const { id, ...orderData } = updatedOrder;
-    const updatePayload: Record<string, any> = {};
+    const updatePayload: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(orderData)) {
       if (val !== undefined && val !== null) {
         updatePayload[key] = val;
@@ -420,7 +424,8 @@ export default function Page() {
 
     let { error } = await supabase.from('orders').update(updatePayload).eq('id', id);
     if (error && updatePayload.tableNumber !== undefined) {
-      const { tableNumber: _ignored, ...payloadWithoutTable } = updatePayload;
+      const payloadWithoutTable = { ...updatePayload };
+      delete payloadWithoutTable.tableNumber;
       const retry = await supabase.from('orders').update(payloadWithoutTable).eq('id', id);
       error = retry.error;
     }
@@ -594,7 +599,7 @@ function MobileHeader() {
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <select value={language} onChange={(e) => setLanguage(e.target.value as any)} className="bg-transparent text-sm font-semibold text-slate-600 dark:text-slate-300 outline-none cursor-pointer hover:text-violet-600 dark:hover:text-violet-400">
+        <select value={language} onChange={(e) => setLanguage(e.target.value as Language)} className="bg-transparent text-sm font-semibold text-slate-600 dark:text-slate-300 outline-none cursor-pointer hover:text-violet-600 dark:hover:text-violet-400">
           <option value="en">EN</option>
           <option value="es">ES</option>
           <option value="fr">FR</option>
@@ -672,7 +677,7 @@ function Sidebar() {
             </div>
             
             <div className="flex gap-1.5 ml-2 mt-2 lg:mt-0">
-              <select value={language} onChange={(e) => setLanguage(e.target.value as any)} className="bg-transparent text-sm font-bold text-slate-500 hover:text-violet-600 dark:text-slate-400 dark:hover:text-violet-400 outline-none cursor-pointer px-1">
+              <select value={language} onChange={(e) => setLanguage(e.target.value as Language)} className="bg-transparent text-sm font-bold text-slate-500 hover:text-violet-600 dark:text-slate-400 dark:hover:text-violet-400 outline-none cursor-pointer px-1">
                 <option value="en">EN</option>
                 <option value="es">ES</option>
                 <option value="fr">FR</option>
@@ -705,7 +710,7 @@ function ToastContainer() {
   }
 
   return (
-    <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-3 pointer-events-none w-full max-w-sm px-4 md:px-0">
+    <div className="fixed top-6 left-1/2 -translate-x-1/2 z-200 flex flex-col gap-3 pointer-events-none w-full max-w-sm px-4 md:px-0">
       {toasts.map((t: Toast) => {
         const { icon, className, iconBg } = getToastInfo(t.type);
         return (
@@ -760,7 +765,7 @@ function LoginView() {
         
         {/* Header Section */}
         <div className="text-center mb-10 transform transition-all duration-500 hover:scale-105">
-          <div className="inline-flex bg-gradient-to-br from-violet-500 to-indigo-600 text-white p-4 rounded-[1.25rem] shadow-xl shadow-violet-500/30 mb-6 relative">
+          <div className="inline-flex bg-linear-to-br from-violet-500 to-indigo-600 text-white p-4 rounded-[1.25rem] shadow-xl shadow-violet-500/30 mb-6 relative">
             <div className="absolute inset-0 bg-white/20 rounded-[1.25rem] animate-ping opacity-20"></div>
             <Activity size={36} strokeWidth={2.5} />
           </div>
@@ -773,7 +778,7 @@ function LoginView() {
           {/* Username Input */}
           <div className="group">
             <div className="relative transform transition-all duration-300 hover:-translate-y-1">
-              <UserIcon className="absolute left-4 top-[18px] text-slate-400 group-focus-within:text-violet-500 transition-colors pointer-events-none" size={20} />
+              <UserIcon className="absolute left-4 top-4.5 text-slate-400 group-focus-within:text-violet-500 transition-colors pointer-events-none" size={20} />
               <input
                 id="login-username"
                 type="text"
@@ -789,7 +794,7 @@ function LoginView() {
           {/* Password Input */}
           <div className="group">
             <div className="relative transform transition-all duration-300 hover:-translate-y-1">
-              <Lock className="absolute left-4 top-[18px] text-slate-400 group-focus-within:text-violet-500 transition-colors pointer-events-none" size={20} />
+              <Lock className="absolute left-4 top-4.5 text-slate-400 group-focus-within:text-violet-500 transition-colors pointer-events-none" size={20} />
               <input
                 id="login-password"
                 type={showPass ? 'text' : 'password'}
@@ -799,7 +804,7 @@ function LoginView() {
                 onChange={e => { setP(e.target.value); setErrors(prev => ({...prev, p: undefined})); }}
                 className={`w-full bg-white/90 dark:bg-slate-800/80 border ${errors.p ? 'border-rose-400 focus:ring-rose-500/20' : 'border-slate-200/80 dark:border-slate-700 focus:border-violet-500 focus:ring-violet-500/20'} focus:ring-4 rounded-2xl py-4 pl-12 pr-12 text-[15px] font-semibold outline-none text-slate-800 dark:text-white transition-all shadow-sm placeholder:font-medium placeholder:text-slate-400`}
               />
-              <button type="button" onClick={() => setShowPass(v => !v)} className="absolute right-4 top-[18px] text-slate-400 hover:text-violet-500 transition-colors">
+              <button type="button" onClick={() => setShowPass(v => !v)} className="absolute right-4 top-4.5 text-slate-400 hover:text-violet-500 transition-colors">
                 {showPass ? <EyeOff size={20}/> : <Eye size={20}/>}
               </button>
             </div>
@@ -810,7 +815,7 @@ function LoginView() {
             id="login-submit"
             type="submit"
             disabled={isLoading}
-            className={`w-full mt-8 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold text-[15px] py-4.5 rounded-2xl shadow-xl shadow-violet-600/30 transition-all flex items-center justify-center gap-2 transform active:scale-[0.97] hover:-translate-y-1 ${isLoading ? 'opacity-80 cursor-not-allowed' : 'animate-pulse-glow'}`}
+            className={`w-full mt-8 bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold text-[15px] py-4.5 rounded-2xl shadow-xl shadow-violet-600/30 transition-all flex items-center justify-center gap-2 transform active:scale-[0.97] hover:-translate-y-1 ${isLoading ? 'opacity-80 cursor-not-allowed' : 'animate-pulse-glow'}`}
           >
             {isLoading
               ? <><Loader2 size={20} className="animate-spin"/> {t('login.signingin')}</>
@@ -831,11 +836,10 @@ function LoginView() {
 
 function POSView() {
   const context = useAppContext();
-  const { menu, cart, addToCart, removeFromCart, clearCart, updateCartItemPrice, addCustomCartItem, settings, addOrder, setActiveTab, showToast, addMenuItem, activeTable, setActiveTable, tableSessions } = context;
+  const { menu, cart, addToCart, removeFromCart, clearCart, updateCartItemPrice, addCustomCartItem, addOrder, setActiveTab, showToast, addMenuItem, activeTable, setActiveTable, tableSessions } = context;
   const { t } = useI18n();
 
   const [search, setSearch] = useState(''); const [cat, setCat] = useState('All');
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isCheckout, setIsCheckout] = useState(false);
   const [isTicketOpen, setIsTicketOpen] = useState(false);
   
@@ -858,7 +862,7 @@ function POSView() {
     const sub = cart.reduce((s: number, i: CartItem) => s + (i.price * i.quantity), 0);
     const gst = 0;
     return { sub, gst, tot: sub };
-  }, [cart, settings]);
+  }, [cart]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { 
@@ -869,9 +873,9 @@ function POSView() {
     return () => window.removeEventListener('keydown', handleKey);
   }, [cart, clearCart]);
 
-  const handleCheckout = (e: React.FormEvent, skipPrint = false) => {
+  const handleCheckout = (e: React.FormEvent | React.MouseEvent, skipPrint = false) => {
     e.preventDefault(); if(!cart.length) return;
-    addOrder({ customerName: cName||'Walk-in', customerPhone: cPhone||'', billType: bType, paymentType: pType, tableNumber: activeTable ?? undefined, items: cart, subtotal: totals.sub, gstAmount: totals.gst, total: totals.tot }, skipPrint);
+    addOrder({ customerName: cName.trim(), customerPhone: cPhone.trim(), billType: bType, paymentType: pType, tableNumber: activeTable ?? undefined, items: cart, subtotal: totals.sub, gstAmount: totals.gst, total: totals.tot }, skipPrint);
     setCName(''); setCPhone(''); setIsCheckout(false);
   };
 
@@ -940,7 +944,7 @@ function POSView() {
             </div>
             <div className="relative w-full xl:w-72 shrink-0">
               <Search className="absolute left-4 top-3 text-slate-400" size={18} />
-              <input type="text" placeholder={t('pos.search')} value={search} onChange={e=>{setSearch(e.target.value); if(e.target.value) setCat('All');}} onFocus={()=>setIsSearchFocused(true)} onBlur={()=>setIsSearchFocused(false)} className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-2xl pl-11 pr-4 py-2.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 transition-all soft-shadow" />
+              <input type="text" placeholder={t('pos.search')} value={search} onChange={e=>{setSearch(e.target.value); if(e.target.value) setCat('All');}} className="w-full bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-2xl pl-11 pr-4 py-2.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10 transition-all soft-shadow" />
             </div>
           </div>
           <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-1">
@@ -1065,7 +1069,7 @@ function POSView() {
 
       {/* ===== MOBILE: Full ticket overlay ===== */}
       {isTicketOpen && createPortal(
-        <div className="fixed inset-0 z-[150] md:hidden" onClick={() => setIsTicketOpen(false)}>
+        <div className="fixed inset-0 z-150 md:hidden" onClick={() => setIsTicketOpen(false)}>
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
           <div className="absolute inset-x-0 bottom-0 bg-white dark:bg-slate-800 rounded-t-3xl shadow-2xl max-h-[85vh] flex flex-col animate-slide-up" onClick={e => e.stopPropagation()}>
             <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mt-3" />
@@ -1307,7 +1311,7 @@ function POSView() {
       </div>
 
       {isCheckout && createPortal(
-        <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-sm sm:p-4">
+        <div className="fixed inset-0 z-150 flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-sm sm:p-4">
           <div className="bg-white dark:bg-slate-900 w-full max-w-lg sm:rounded-[2.5rem] rounded-t-4xl shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[90vh]">
             <div className="p-6 pb-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
               <div>
@@ -1350,7 +1354,7 @@ function POSView() {
             <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 rounded-b-[2.5rem] flex gap-4">
               <button 
                 type="button" 
-                onClick={(e) => handleCheckout(e as any, true)}
+                onClick={(e) => handleCheckout(e, true)}
                 disabled={cart.length === 0}
                 className={`w-1/3 py-4 rounded-2xl font-bold text-lg shadow-xl flex justify-center items-center gap-2 transform active:scale-[0.98] transition-all 
                   ${cart.length === 0 
@@ -1378,7 +1382,7 @@ function POSView() {
 
       {/* Custom Item / Manual Price Modal */}
       {showCustomModal && createPortal(
-        <div className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={() => setShowCustomModal(false)}>
+        <div className="fixed inset-0 z-220 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={() => setShowCustomModal(false)}>
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-700 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center">
               <h4 className="font-extrabold text-lg text-slate-800 dark:text-white flex items-center gap-2">
@@ -1445,8 +1449,13 @@ function POSView() {
 }
 
 function TablesView() {
-  const { tableSessions, setActiveTable, setActiveTab, showToast } = useAppContext();
-  const now = Date.now();
+  const { tableSessions, setActiveTable, setActiveTab } = useAppContext();
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   const openTable = (n: number | null) => {
     setActiveTable(n);
@@ -1552,7 +1561,7 @@ function TablesView() {
           return (
             <div
               key={n}
-              className={`bg-white dark:bg-slate-800 border-2 ${cfg.card} rounded-[2rem] p-5 md:p-6 flex flex-col justify-between soft-shadow hover-scale transition-all duration-200`}
+              className={`bg-white dark:bg-slate-800 border-2 ${cfg.card} rounded-4xl p-5 md:p-6 flex flex-col justify-between soft-shadow hover-scale transition-all duration-200`}
             >
               {/* Header with Table Logo */}
               <div className="flex items-center gap-3.5 mb-4">
@@ -1687,7 +1696,7 @@ function DashboardView() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2.5rem] border border-slate-200/60 dark:border-slate-700 soft-shadow lg:col-span-2 flex flex-col">
           <h3 className="font-bold text-xl text-slate-800 dark:text-white tracking-tight mb-8">7-Day Revenue Pulse</h3>
-          <div className="relative flex-1 flex mt-auto min-h-[280px]">
+          <div className="relative flex-1 flex mt-auto min-h-70">
             {/* Y-axis labels */}
             <div className="flex flex-col justify-between text-[10px] font-bold text-slate-400 pb-10 pt-8 pr-4 border-r border-slate-100 dark:border-slate-700">
                <span>₹{maxRevenue.toLocaleString('en-IN')}</span>
@@ -2056,7 +2065,7 @@ function MenuView() {
       ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
         {filteredMenu.map((i: MenuItem) => (
-          <div key={i.id} className={`bg-white dark:bg-slate-800 border ${i.isAvailable?'border-slate-200/60 dark:border-slate-700':'border-rose-100 dark:border-rose-900 opacity-70'} rounded-[2rem] overflow-hidden flex flex-col transition-all soft-shadow hover-scale group`}>
+          <div key={i.id} className={`bg-white dark:bg-slate-800 border ${i.isAvailable?'border-slate-200/60 dark:border-slate-700':'border-rose-100 dark:border-rose-900 opacity-70'} rounded-4xl overflow-hidden flex flex-col transition-all soft-shadow hover-scale group`}>
             <div className="relative h-40 bg-slate-100 dark:bg-slate-700/50 overflow-hidden">
               <SafeMenuImage src={i.imageUrl} alt={i.name} category={i.category} />
               <div className="absolute top-4 left-4 flex gap-2">
@@ -2086,7 +2095,7 @@ function MenuView() {
       )}
 
       {itemToDelete && createPortal(
-        <div key="delete-modal" className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+        <div key="delete-modal" className="fixed inset-0 z-150 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2.5rem] shadow-2xl p-8 animate-pop-in border border-slate-100 dark:border-slate-800 max-h-[90vh] overflow-y-auto">
             <div className="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center text-rose-500 mb-6 mx-auto ring-8 ring-rose-50 dark:ring-rose-900/10">
               <Trash2 size={32} />
@@ -2103,7 +2112,7 @@ function MenuView() {
       )}
 
       {isModalOpen && createPortal(
-        <div key="add-modal" className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
+        <div key="add-modal" className="fixed inset-0 z-150 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-[2.5rem] shadow-2xl flex flex-col border border-slate-100 dark:border-slate-800 animate-pop-in" style={{maxHeight: '92vh'}}>
             <div className="p-5 sm:p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center shrink-0">
               <div>
@@ -2192,7 +2201,7 @@ function MenuView() {
 
             <div className="p-5 sm:p-8 border-t border-slate-100 dark:border-slate-800 flex gap-4 bg-slate-50/50 dark:bg-slate-900/50 shrink-0">
               <button onClick={()=>setIsModalOpen(false)} className="flex-1 py-4 px-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-extrabold rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all active:scale-95 shadow-sm text-sm sm:text-base">Cancel</button>
-              <button type="submit" form="dish-form" className="flex-[2] py-4 px-6 bg-slate-900 dark:bg-violet-600 text-white font-extrabold rounded-2xl shadow-xl hover:bg-slate-800 dark:hover:bg-violet-700 transition-all active:scale-95 flex items-center justify-center gap-2 text-sm sm:text-base tracking-tight">
+              <button type="submit" form="dish-form" className="flex-2 py-4 px-6 bg-slate-900 dark:bg-violet-600 text-white font-extrabold rounded-2xl shadow-xl hover:bg-slate-800 dark:hover:bg-violet-700 transition-all active:scale-95 flex items-center justify-center gap-2 text-sm sm:text-base tracking-tight">
                 {editingItem ? <Edit size={20}/> : <PlusCircle size={20}/>}
                 <span>{editingItem ? 'Update Dish Record' : 'Create New Dish'}</span>
               </button>
@@ -2209,10 +2218,14 @@ function SettingsView() {
   const context = useAppContext();
   const { settings, updateSettings } = context;
 
+  const [prevSettings, setPrevSettings] = useState(settings);
   const [formState, setFormState] = useState(settings);
   
-  // Bug #22: Sync form inputs when settings load from Supabase
-  useEffect(() => { setFormState(settings); }, [settings]);
+  // Bug #22: Sync form inputs when settings load from Supabase without cascading renders
+  if (settings !== prevSettings) {
+    setPrevSettings(settings);
+    setFormState(settings);
+  }
 
   const handleSubmit = (e: React.FormEvent) => { 
       e.preventDefault(); 
@@ -2251,48 +2264,6 @@ function SettingsView() {
         </form>
       </div>
     </div>
-  );
-}
-
-function RestaurantSproutLogo({ className = "w-13 h-13" }: { className?: string }) {
-  return (
-    <svg 
-      viewBox="0 0 100 80" 
-      fill="none" 
-      xmlns="http://www.w3.org/2000/svg" 
-      className={className}
-      aria-hidden="true"
-    >
-      {/* Bowl Rim */}
-      <ellipse cx="50" cy="56" rx="34" ry="4.5" fill="#1c1917" />
-      {/* Bowl Body */}
-      <path 
-        d="M20 56 C24 71, 76 71, 80 56 Z" 
-        fill="#1c1917" 
-      />
-      {/* Bowl Base */}
-      <path 
-        d="M36 70 L64 70 C60 74, 40 74, 36 70 Z" 
-        fill="#1c1917" 
-      />
-      {/* Stem */}
-      <path 
-        d="M50 54 C50 44, 49 33, 47 18" 
-        stroke="#1c1917" 
-        strokeWidth="3.2" 
-        strokeLinecap="round" 
-      />
-      {/* Left Leaf */}
-      <path 
-        d="M48 40 C36 41, 26 33, 24 23 C30 20, 42 24, 48 35 Z" 
-        fill="#1c1917" 
-      />
-      {/* Right Leaf */}
-      <path 
-        d="M48 30 C54 16, 68 8, 77 10 C75 22, 65 31, 49 32 Z" 
-        fill="#1c1917" 
-      />
-    </svg>
   );
 }
 
@@ -2387,6 +2358,9 @@ function ReceiptPreviewModal() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Track the order id for syncing state without cascading renders
+  const [prevOrderId, setPrevOrderId] = useState(order?.id);
+
   // Edit form states
   const [editedCustomerName, setEditedCustomerName] = useState(order?.customerName || '');
   const [editedCustomerPhone, setEditedCustomerPhone] = useState(order?.customerPhone || '');
@@ -2398,16 +2372,15 @@ function ReceiptPreviewModal() {
   const [customEntryName, setCustomEntryName] = useState<string>('');
   const [customEntryPrice, setCustomEntryPrice] = useState<string>('');
 
-  useEffect(() => {
-    if (order) {
-      setEditedCustomerName(order.customerName || '');
-      setEditedCustomerPhone(order.customerPhone || '');
-      setEditedTableNumber(order.tableNumber);
-      setEditedBillType(order.billType || 'Dine-In');
-      setEditedPaymentType(order.paymentType || 'UPI');
-      setEditedItems(order.items ? order.items.map(i => ({ ...i })) : []);
-    }
-  }, [order]);
+  if (order && order.id !== prevOrderId) {
+    setPrevOrderId(order.id);
+    setEditedCustomerName(order.customerName || '');
+    setEditedCustomerPhone(order.customerPhone || '');
+    setEditedTableNumber(order.tableNumber);
+    setEditedBillType(order.billType || 'Dine-In');
+    setEditedPaymentType(order.paymentType || 'UPI');
+    setEditedItems(order.items ? order.items.map(i => ({ ...i })) : []);
+  }
 
   const editedSubtotal = useMemo(() => {
     return editedItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
@@ -2494,24 +2467,30 @@ function ReceiptPreviewModal() {
   if (!order) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center sm:p-6 bg-slate-950/70 backdrop-blur-md print:p-0 print:bg-transparent print:block print:static print:inset-auto print:h-auto print:w-full print:overflow-visible">
+    <div className="fixed inset-0 z-200 flex items-center justify-center sm:p-6 bg-slate-950/70 backdrop-blur-md print:p-0 print:m-0 print:bg-transparent print:block print:static print:inset-auto print:h-auto print:w-full print:overflow-visible">
       <style>{`@media print { 
-  @page { size: auto; margin: 4mm; } 
-  body { 
+  @page { size: auto; margin: 0mm !important; } 
+  html, body { 
+    margin: 0 !important; 
+    padding: 0 !important; 
     background: white !important; 
-    color: #1c1917 !important; 
+    color: #000000 !important; 
     -webkit-print-color-adjust: exact !important; 
     print-color-adjust: exact !important; 
+    height: auto !important;
+    overflow: visible !important;
   }
   #print-area { 
     margin: 0 auto !important; 
-    padding: 12px !important; 
+    padding: 1mm 2mm 3mm 2mm !important; 
     box-shadow: none !important; 
     border: none !important; 
     background: white !important; 
-    color: #1c1917 !important;
+    color: #000000 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    width: 100% !important;
+    max-width: 100% !important;
   } 
 }`}</style>
 
@@ -2826,18 +2805,18 @@ function ReceiptPreviewModal() {
               id="print-area" 
               className={`transition-all select-none print:select-auto ${
                 format === 'thermal'
-                  ? 'w-full max-w-[420px] sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
+                  ? 'w-full max-w-105 sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
                   : format === 'kot'
-                  ? 'w-full max-w-[420px] sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
+                  ? 'w-full max-w-105 sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
                   : 'w-full max-w-[210mm] min-h-[297mm] p-10 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
               }`}
             >
             {/* THERMAL ROLL FORMAT — Crisp, High-Contrast Dark Text */}
             {format === 'thermal' && (
-              <div>
+              <div className="pt-0 print:pt-0">
                 {/* Brand Name in Single Line (No Logo) */}
-                <div className="text-center pb-1">
-                  <h1 className="text-2xl sm:text-[27px] font-black uppercase tracking-tight text-black leading-tight whitespace-nowrap">
+                <div className="text-center pb-1 pt-0 print:pt-0">
+                  <h1 className="text-2xl sm:text-[27px] font-black uppercase tracking-tight text-black leading-tight whitespace-nowrap mt-0 print:mt-0">
                     {settings.hotelName || 'VETRIVEL UNAVAGAM'}
                   </h1>
                   <p className="text-xs sm:text-[13px] text-stone-900 font-semibold leading-snug mt-1">
@@ -2862,16 +2841,6 @@ function ReceiptPreviewModal() {
                       <div className="flex gap-2">
                         <span className="font-semibold text-stone-800 w-16">Type:</span>
                         <span className="font-bold text-black">{order.billType}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="font-semibold text-stone-800 w-16">Table:</span>
-                        <span className="font-bold text-black">
-                          {order.tableNumber
-                            ? (order.customerName && order.customerName !== 'Walk-in'
-                                ? `Table ${order.tableNumber} (Type ${String.fromCharCode(64 + order.tableNumber)}) • ${order.customerName}`
-                                : `Table ${order.tableNumber} (Type ${String.fromCharCode(64 + order.tableNumber)})`)
-                            : (order.customerName || 'Takeaway')}
-                        </span>
                       </div>
                     </div>
 
@@ -2940,15 +2909,8 @@ function ReceiptPreviewModal() {
                 {/* Solid Divider */}
                 <div className="border-b-2 border-black my-3.5"></div>
 
-                {/* Bottom Bar: Centered Payment Pill (Bold Dark) */}
-                <div className="flex items-center justify-center pt-1">
-                  <div className="inline-flex items-center px-4 py-1.5 rounded-full border-2 border-black text-xs sm:text-[12.5px] font-black uppercase tracking-wider text-black bg-transparent">
-                    PAID VIA {order.paymentType || 'UPI'}
-                  </div>
-                </div>
-
                 {/* Centered Footer Message (Darker, High Legibility) */}
-                <p className="text-center text-xs sm:text-[12px] font-bold uppercase tracking-wider text-stone-900 mt-4 leading-normal">
+                <p className="text-center text-xs sm:text-[12px] font-bold uppercase tracking-wider text-stone-900 mt-3 leading-normal">
                   {settings.footerMessage || 'NO BRANCHES • THANK YOU FOR CHOOSING VETRIVEL UNAVAGAM'}
                 </p>
               </div>

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Printer, Edit, Plus, Minus, Trash2, ShoppingCart, Check, X } from 'lucide-react';
 import { useAppContext } from '@/contexts/AppContext';
 import type { Settings, CartItem, Order } from '@/types';
@@ -13,6 +13,9 @@ export default function ReceiptPreviewModal() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Track order id for syncing without cascading renders
+  const [prevOrderId, setPrevOrderId] = useState(order?.id);
+
   // Edit form states
   const [editedCustomerName, setEditedCustomerName] = useState(order?.customerName || '');
   const [editedCustomerPhone, setEditedCustomerPhone] = useState(order?.customerPhone || '');
@@ -24,16 +27,15 @@ export default function ReceiptPreviewModal() {
   const [customEntryName, setCustomEntryName] = useState<string>('');
   const [customEntryPrice, setCustomEntryPrice] = useState<string>('');
 
-  useEffect(() => {
-    if (order) {
-      setEditedCustomerName(order.customerName || '');
-      setEditedCustomerPhone(order.customerPhone || '');
-      setEditedTableNumber(order.tableNumber);
-      setEditedBillType(order.billType || 'Dine-In');
-      setEditedPaymentType(order.paymentType || 'UPI');
-      setEditedItems(order.items ? order.items.map(i => ({ ...i })) : []);
-    }
-  }, [order]);
+  if (order && order.id !== prevOrderId) {
+    setPrevOrderId(order.id);
+    setEditedCustomerName(order.customerName || '');
+    setEditedCustomerPhone(order.customerPhone || '');
+    setEditedTableNumber(order.tableNumber);
+    setEditedBillType(order.billType || 'Dine-In');
+    setEditedPaymentType(order.paymentType || 'UPI');
+    setEditedItems(order.items ? order.items.map(i => ({ ...i })) : []);
+  }
 
   const editedSubtotal = useMemo(() => {
     return editedItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
@@ -120,24 +122,30 @@ export default function ReceiptPreviewModal() {
   if (!order) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center sm:p-6 bg-slate-950/70 backdrop-blur-md print:p-0 print:bg-transparent print:block print:static print:inset-auto print:h-auto print:w-full print:overflow-visible">
+    <div className="fixed inset-0 z-200 flex items-center justify-center sm:p-6 bg-slate-950/70 backdrop-blur-md print:p-0 print:m-0 print:bg-transparent print:block print:static print:inset-auto print:h-auto print:w-full print:overflow-visible">
       <style>{`@media print { 
-  @page { size: auto; margin: 4mm; } 
-  body { 
+  @page { size: auto; margin: 0mm !important; } 
+  html, body { 
+    margin: 0 !important; 
+    padding: 0 !important; 
     background: white !important; 
-    color: #1c1917 !important; 
+    color: #000000 !important; 
     -webkit-print-color-adjust: exact !important; 
     print-color-adjust: exact !important; 
+    height: auto !important;
+    overflow: visible !important;
   }
   #print-area { 
-    margin: 0 auto !important; 
-    padding: 16px !important; 
+    margin: 0 !important; 
+    padding: 1mm 2mm 3mm 2mm !important; 
     box-shadow: none !important; 
     border: none !important; 
     background: white !important; 
-    color: #1c1917 !important; 
+    color: #000000 !important; 
     -webkit-print-color-adjust: exact !important; 
     print-color-adjust: exact !important; 
+    width: 100% !important;
+    max-width: 100% !important;
   } 
 }`}</style>
 
@@ -452,18 +460,18 @@ export default function ReceiptPreviewModal() {
               id="print-area" 
               className={`transition-all select-none print:select-auto ${
                 format === 'thermal'
-                  ? 'w-full max-w-[420px] sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
+                  ? 'w-full max-w-105 sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
                   : format === 'kot'
-                  ? 'w-full max-w-[420px] sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
+                  ? 'w-full max-w-105 sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
                   : 'w-full max-w-[210mm] min-h-[297mm] p-10 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
               }`}
             >
             {/* THERMAL ROLL FORMAT — Crisp, High-Contrast Dark Text */}
             {format === 'thermal' && (
-              <div>
+              <div className="pt-0 print:pt-0">
                 {/* Brand Name in Single Line (No Logo) */}
-                <div className="text-center pb-1">
-                  <h1 className="text-2xl sm:text-[27px] font-black uppercase tracking-tight text-black leading-tight whitespace-nowrap">
+                <div className="text-center pb-1 pt-0 print:pt-0">
+                  <h1 className="text-2xl sm:text-[27px] font-black uppercase tracking-tight text-black leading-tight whitespace-nowrap mt-0 print:mt-0">
                     {settings.hotelName || 'VETRIVEL UNAVAGAM'}
                   </h1>
                   <p className="text-xs sm:text-[13px] text-stone-900 font-semibold leading-snug mt-1">
@@ -488,16 +496,6 @@ export default function ReceiptPreviewModal() {
                       <div className="flex gap-2">
                         <span className="font-semibold text-stone-800 w-16">Type:</span>
                         <span className="font-bold text-black">{order.billType}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="font-semibold text-stone-800 w-16">Table:</span>
-                        <span className="font-bold text-black">
-                          {order.tableNumber
-                            ? (order.customerName && order.customerName !== 'Walk-in'
-                                ? `Table ${order.tableNumber} (Type ${String.fromCharCode(64 + order.tableNumber)}) • ${order.customerName}`
-                                : `Table ${order.tableNumber} (Type ${String.fromCharCode(64 + order.tableNumber)})`)
-                            : (order.customerName || 'Takeaway')}
-                        </span>
                       </div>
                     </div>
 
@@ -566,15 +564,8 @@ export default function ReceiptPreviewModal() {
                 {/* Solid Divider */}
                 <div className="border-b-2 border-black my-3.5"></div>
 
-                {/* Bottom Bar: Centered Payment Pill (Bold Dark) */}
-                <div className="flex items-center justify-center pt-1">
-                  <div className="inline-flex items-center px-4 py-1.5 rounded-full border-2 border-black text-xs sm:text-[12.5px] font-black uppercase tracking-wider text-black bg-transparent">
-                    PAID VIA {order.paymentType || 'UPI'}
-                  </div>
-                </div>
-
                 {/* Centered Footer Message (Darker, High Legibility) */}
-                <p className="text-center text-xs sm:text-[12px] font-bold uppercase tracking-wider text-stone-900 mt-4 leading-normal">
+                <p className="text-center text-xs sm:text-[12px] font-bold uppercase tracking-wider text-stone-900 mt-3 leading-normal">
                   {settings.footerMessage || 'NO BRANCHES • THANK YOU FOR CHOOSING VETRIVEL UNAVAGAM'}
                 </p>
               </div>

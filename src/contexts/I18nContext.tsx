@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-type Language = 'en' | 'es' | 'fr' | 'ta';
+export type Language = 'en' | 'es' | 'fr' | 'ta';
 
 type Dictionary = {
   [key in Language]: {

@@ -43,7 +43,7 @@ export default function POSView() {
 
   const handleCheckout = (e: React.FormEvent) => {
     e.preventDefault(); if(!cart.length) return;
-    addOrder({ customerName: cName||'Walk-in', customerPhone: cPhone||'', billType: bType, paymentType: pType, items: cart, subtotal: totals.sub, gstAmount: totals.gst, total: totals.tot });
+    addOrder({ customerName: cName.trim(), customerPhone: cPhone.trim(), billType: bType, paymentType: pType, items: cart, subtotal: totals.sub, gstAmount: totals.gst, total: totals.tot });
     setCName(''); setCPhone(''); setIsCheckout(false);
   };
 
@@ -132,7 +132,7 @@ export default function POSView() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-3 hide-scrollbar min-h-[150px] pr-1">
+          <div className="flex-1 overflow-y-auto space-y-3 hide-scrollbar min-h-37.5 pr-1">
             {cart.length===0 ? (
               <div className="h-full flex flex-col justify-center items-center text-slate-400 opacity-60"><ShoppingCart size={48} className="mb-3 opacity-50"/><p className="font-medium">Cart is empty</p></div>
             ) : cart.map((item: CartItem) => (
@@ -276,7 +276,7 @@ export default function POSView() {
 
       {/* Custom Item / Manual Price Modal */}
       {showCustomModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={() => setShowCustomModal(false)}>
+        <div className="fixed inset-0 z-220 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={() => setShowCustomModal(false)}>
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-700 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center">
               <h4 className="font-extrabold text-lg text-slate-800 dark:text-white flex items-center gap-2">

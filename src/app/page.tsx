@@ -409,6 +409,49 @@ export default function Page() {
       }
   }, [settings, showToast, orders, activeTable]);
 
+  const updateOrder = useCallback(async (updatedOrder: Order) => {
+    const { id, ...orderData } = updatedOrder;
+    const updatePayload: Record<string, any> = {};
+    for (const [key, val] of Object.entries(orderData)) {
+      if (val !== undefined && val !== null) {
+        updatePayload[key] = val;
+      }
+    }
+
+    let { error } = await supabase.from('orders').update(updatePayload).eq('id', id);
+    if (error && updatePayload.tableNumber !== undefined) {
+      const { tableNumber: _ignored, ...payloadWithoutTable } = updatePayload;
+      const retry = await supabase.from('orders').update(payloadWithoutTable).eq('id', id);
+      error = retry.error;
+    }
+
+    if (error) {
+      showToast('Error updating bill: ' + (error.message || 'Database error'), 'error');
+      console.error('Order update error:', error);
+    } else {
+      setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+      setCurrentReceiptOrder(prev => (prev && prev.id === updatedOrder.id ? updatedOrder : prev));
+      showToast(`Bill ${updatedOrder.billNumber} Updated Successfully`, 'success');
+    }
+  }, [showToast]);
+
+  const editOrderInPOS = useCallback((orderToEdit: Order) => {
+    const targetTable = orderToEdit.tableNumber ?? 0;
+    _setActiveTable(orderToEdit.tableNumber ?? null);
+    setTableSessions(prev => ({
+      ...prev,
+      [targetTable]: {
+        tableNumber: targetTable,
+        cart: orderToEdit.items.map(item => ({ ...item })),
+        status: 'occupied',
+        openedAt: new Date().toISOString(),
+      }
+    }));
+    setIsReceiptOpen(false);
+    _setActiveTab('pos');
+    showToast(`Order ${orderToEdit.billNumber} loaded in Terminal for editing`, 'info');
+  }, [showToast]);
+
   // ---- Table-aware cart helpers ----
   const updateTableCart = useCallback((updater: (cart: CartItem[]) => CartItem[]) => {
     setTableSessions(sessions => {
@@ -450,6 +493,21 @@ export default function Page() {
     }
   }, [showToast, updateTableCart]);
 
+  const updateCartItemPrice = useCallback((id: string, newPrice: number) => {
+    updateTableCart(p => p.map(i => i.id === id ? { ...i, price: Math.max(0, newPrice) } : i));
+  }, [updateTableCart]);
+
+  const addCustomCartItem = useCallback((name: string, price: number) => {
+    const customItem: MenuItem = {
+      id: `custom-${Date.now()}`,
+      name: name.trim() || 'Custom Item',
+      price: Math.max(0, price),
+      category: 'Custom',
+      isAvailable: true,
+    };
+    addToCart(customItem);
+  }, [addToCart]);
+
   const setActiveTab = useCallback((t: string) => {
       _setActiveTab(t);
       setIsMobileMenuOpen(false);
@@ -460,8 +518,8 @@ export default function Page() {
     user, login, logout,
     settings, updateSettings,
     menu, fetchMenu, addMenuItem, updateMenuItem, deleteMenuItem, toggleAvailability,
-    orders, addOrder,
-    cart, addToCart, removeFromCart, clearCart,
+    orders, addOrder, updateOrder, editOrderInPOS,
+    cart, addToCart, removeFromCart, clearCart, updateCartItemPrice, addCustomCartItem,
     toasts, showToast, removeToast, activeTab, setActiveTab,
     isMobileMenuOpen, setIsMobileMenuOpen, 
     currentReceiptOrder, setCurrentReceiptOrder, 
@@ -469,7 +527,7 @@ export default function Page() {
     tableSessions, activeTable, setActiveTable,
   }), [
     theme, toggleTheme, user, login, logout, settings, updateSettings, menu, fetchMenu, addMenuItem, updateMenuItem, deleteMenuItem, 
-    toggleAvailability, orders, addOrder, cart, addToCart, removeFromCart, clearCart, toasts, showToast, removeToast, activeTab, setActiveTab, 
+    toggleAvailability, orders, addOrder, updateOrder, editOrderInPOS, cart, addToCart, removeFromCart, clearCart, updateCartItemPrice, addCustomCartItem, toasts, showToast, removeToast, activeTab, setActiveTab, 
     isMobileMenuOpen, currentReceiptOrder, isReceiptOpen, tableSessions, activeTable, setActiveTable
   ]);
 
@@ -773,7 +831,7 @@ function LoginView() {
 
 function POSView() {
   const context = useAppContext();
-  const { menu, cart, addToCart, removeFromCart, clearCart, settings, addOrder, setActiveTab, showToast, addMenuItem, activeTable, setActiveTable, tableSessions } = context;
+  const { menu, cart, addToCart, removeFromCart, clearCart, updateCartItemPrice, addCustomCartItem, settings, addOrder, setActiveTab, showToast, addMenuItem, activeTable, setActiveTable, tableSessions } = context;
   const { t } = useI18n();
 
   const [search, setSearch] = useState(''); const [cat, setCat] = useState('All');
@@ -781,6 +839,13 @@ function POSView() {
   const [isCheckout, setIsCheckout] = useState(false);
   const [isTicketOpen, setIsTicketOpen] = useState(false);
   
+  // Custom manual price editing in terminal
+  const [editingPriceItemId, setEditingPriceItemId] = useState<string | null>(null);
+  const [tempPrice, setTempPrice] = useState('');
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customPrice, setCustomPrice] = useState('');
+
   const [cName, setCName] = useState(''); const [cPhone, setCPhone] = useState('');
   const [bType, setBType] = useState<Order['billType']>('Dine-In'); 
   const [pType, setPType] = useState<Order['paymentType']>('UPI');
@@ -1010,6 +1075,14 @@ function POSView() {
                   <ShoppingCart className="text-violet-500"/> {activeTable ? `Table ${activeTable} Order` : t('pos.current_order')}
                 </h3>
                 <div className="flex items-center gap-2">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowCustomModal(true)} 
+                    className="text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 hover:bg-violet-100 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    title="Add custom item with manual specific price"
+                  >
+                    <PlusCircle size={13}/> Custom ₹
+                  </button>
                   {cart.length > 0 && <button onClick={clearCart} className="text-slate-400 hover:text-rose-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"><Trash2 size={14}/> {t('pos.clear')}</button>}
                   <button onClick={() => setIsTicketOpen(false)} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-xl text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"><X size={18}/></button>
                 </div>
@@ -1020,7 +1093,58 @@ function POSView() {
                   <div key={item.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-700/50">
                     <div className="flex-1 min-w-0 pr-3">
                       <p className="font-semibold text-slate-800 dark:text-white text-sm truncate">{item.name}</p>
-                      <p className="text-[11px] font-medium text-slate-500 mt-1">₹{item.price}</p>
+                      {editingPriceItemId === item.id ? (
+                        <div className="flex items-center gap-1 mt-1" onClick={e => e.stopPropagation()}>
+                          <span className="text-xs font-bold text-slate-400">₹</span>
+                          <input 
+                            type="number"
+                            min="0"
+                            step="any"
+                            autoFocus
+                            value={tempPrice}
+                            onChange={e => setTempPrice(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                const val = parseFloat(tempPrice);
+                                if (!isNaN(val) && val >= 0) updateCartItemPrice(item.id, val);
+                                setEditingPriceItemId(null);
+                              } else if (e.key === 'Escape') {
+                                setEditingPriceItemId(null);
+                              }
+                            }}
+                            onBlur={() => {
+                              const val = parseFloat(tempPrice);
+                              if (!isNaN(val) && val >= 0) updateCartItemPrice(item.id, val);
+                              setEditingPriceItemId(null);
+                            }}
+                            className="w-16 bg-white dark:bg-slate-700 border-2 border-violet-500 rounded-lg px-1.5 py-0.5 text-xs font-black text-slate-900 dark:text-white outline-none"
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              const val = parseFloat(tempPrice);
+                              if (!isNaN(val) && val >= 0) updateCartItemPrice(item.id, val);
+                              setEditingPriceItemId(null);
+                            }}
+                            className="p-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer"
+                          >
+                            <Check size={11}/>
+                          </button>
+                        </div>
+                      ) : (
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setEditingPriceItemId(item.id);
+                            setTempPrice(String(item.price));
+                          }}
+                          title="Click to edit manual price"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-600 dark:text-violet-400 bg-violet-50 hover:bg-violet-100 dark:bg-violet-900/30 dark:hover:bg-violet-900/60 px-1.5 py-0.5 rounded-md mt-1 transition-colors cursor-pointer group"
+                        >
+                          <span>₹{item.price}</span>
+                          <Edit size={10} className="opacity-60 group-hover:opacity-100"/>
+                        </button>
+                      )}
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden soft-shadow">
@@ -1028,7 +1152,7 @@ function POSView() {
                         <span className="w-6 text-center font-bold text-sm select-none">{item.quantity}</span>
                         <button type="button" onClick={(e) => { e.stopPropagation(); addToCart(item); }} className="w-9 h-9 flex justify-center items-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Plus size={14} strokeWidth={3}/></button>
                       </div>
-                      <div className="w-14 text-right font-bold text-slate-800 dark:text-white">₹{item.price * item.quantity}</div>
+                      <div className="w-14 text-right font-bold text-slate-800 dark:text-white">₹{(item.price * item.quantity).toFixed(0)}</div>
                     </div>
                   </div>
                 ))}
@@ -1063,11 +1187,21 @@ function POSView() {
               {activeTable ? `Table ${activeTable} Ticket` : 'Takeaway / Counter Ticket'}
             </p>
           </div>
-          {cart.length > 0 && (
-            <button onClick={clearCart} className="text-slate-400 hover:text-rose-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">
-              <Trash2 size={13}/> {t('pos.clear')}
+          <div className="flex items-center gap-1.5">
+            <button 
+              type="button" 
+              onClick={() => setShowCustomModal(true)} 
+              className="text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30 flex items-center gap-1 bg-violet-50/70 dark:bg-violet-900/20 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              title="Add custom item with manual specific price"
+            >
+              <PlusCircle size={13}/> Custom ₹
             </button>
-          )}
+            {cart.length > 0 && (
+              <button onClick={clearCart} className="text-slate-400 hover:text-rose-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+                <Trash2 size={13}/> {t('pos.clear')}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scroll p-5 space-y-3 min-h-0">
@@ -1081,7 +1215,58 @@ function POSView() {
               <div key={item.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-700/50 hover-scale">
                 <div className="flex-1 min-w-0 pr-3">
                   <p className="font-semibold text-slate-800 dark:text-white text-sm truncate">{item.name}</p>
-                  <p className="text-[11px] font-medium text-slate-500 mt-1">₹{item.price}</p>
+                  {editingPriceItemId === item.id ? (
+                    <div className="flex items-center gap-1 mt-1" onClick={e => e.stopPropagation()}>
+                      <span className="text-xs font-bold text-slate-400">₹</span>
+                      <input 
+                        type="number"
+                        min="0"
+                        step="any"
+                        autoFocus
+                        value={tempPrice}
+                        onChange={e => setTempPrice(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            const val = parseFloat(tempPrice);
+                            if (!isNaN(val) && val >= 0) updateCartItemPrice(item.id, val);
+                            setEditingPriceItemId(null);
+                          } else if (e.key === 'Escape') {
+                            setEditingPriceItemId(null);
+                          }
+                        }}
+                        onBlur={() => {
+                          const val = parseFloat(tempPrice);
+                          if (!isNaN(val) && val >= 0) updateCartItemPrice(item.id, val);
+                          setEditingPriceItemId(null);
+                        }}
+                        className="w-16 bg-white dark:bg-slate-700 border-2 border-violet-500 rounded-lg px-1.5 py-0.5 text-xs font-black text-slate-900 dark:text-white outline-none"
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          const val = parseFloat(tempPrice);
+                          if (!isNaN(val) && val >= 0) updateCartItemPrice(item.id, val);
+                          setEditingPriceItemId(null);
+                        }}
+                        className="p-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer"
+                      >
+                        <Check size={11}/>
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setEditingPriceItemId(item.id);
+                        setTempPrice(String(item.price));
+                      }}
+                      title="Click to edit manual price"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-600 dark:text-violet-400 bg-violet-50 hover:bg-violet-100 dark:bg-violet-900/30 dark:hover:bg-violet-900/60 px-1.5 py-0.5 rounded-md mt-1 transition-colors cursor-pointer group"
+                    >
+                      <span>₹{item.price}</span>
+                      <Edit size={10} className="opacity-60 group-hover:opacity-100"/>
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden soft-shadow">
@@ -1089,7 +1274,7 @@ function POSView() {
                     <span className="w-6 text-center font-bold text-xs select-none">{item.quantity}</span>
                     <button type="button" onClick={(e)=>{e.stopPropagation(); addToCart(item);}} className="w-8 h-8 flex justify-center items-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Plus size={14} strokeWidth={3}/></button>
                   </div>
-                  <div className="w-14 text-right font-bold text-slate-800 dark:text-white">₹{item.price * item.quantity}</div>
+                  <div className="w-14 text-right font-bold text-slate-800 dark:text-white">₹{(item.price * item.quantity).toFixed(0)}</div>
                 </div>
               </div>
             ))
@@ -1184,6 +1369,71 @@ function POSView() {
                     : 'bg-slate-900 dark:bg-violet-600 text-white hover:bg-slate-800 dark:hover:bg-violet-700'}`}
               >
                 <Printer size={20}/> Print & Complete
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Custom Item / Manual Price Modal */}
+      {showCustomModal && createPortal(
+        <div className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={() => setShowCustomModal(false)}>
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-700 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center">
+              <h4 className="font-extrabold text-lg text-slate-800 dark:text-white flex items-center gap-2">
+                <Coins size={18} className="text-violet-500"/> Custom Manual Item
+              </h4>
+              <button onClick={() => setShowCustomModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer">
+                <X size={18}/>
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Item Name</label>
+              <input 
+                type="text"
+                placeholder="e.g. Special Dish / Extra Gravy"
+                value={customName}
+                onChange={e => setCustomName(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Specific Custom Price (₹)</label>
+              <input 
+                type="number"
+                min="0"
+                step="any"
+                placeholder="e.g. 150"
+                value={customPrice}
+                onChange={e => setCustomPrice(e.target.value)}
+                className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3.5 py-2.5 text-sm font-black text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button 
+                type="button"
+                onClick={() => {
+                  const priceVal = parseFloat(customPrice);
+                  if (!isNaN(priceVal) && priceVal >= 0) {
+                    addCustomCartItem(customName || 'Custom Item', priceVal);
+                    setCustomName('');
+                    setCustomPrice('');
+                    setShowCustomModal(false);
+                  } else {
+                    showToast('Please enter a valid price', 'error');
+                  }
+                }}
+                className="flex-1 bg-violet-600 hover:bg-violet-700 text-white font-bold text-sm py-3 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-violet-500/25"
+              >
+                <Plus size={16}/> Add to Ticket
+              </button>
+              <button 
+                type="button"
+                onClick={() => setShowCustomModal(false)}
+                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-bold text-sm px-4 py-3 rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
               </button>
             </div>
           </div>
@@ -1536,7 +1786,20 @@ function OrdersView() {
                 )}
                 <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded-md text-[10px] font-semibold uppercase">{o.paymentType}</span>
               </div>
-              <button onClick={()=>{setCurrentReceiptOrder(o);setIsReceiptOpen(true);}} className="ml-3 shrink-0 w-11 h-11 rounded-xl bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"><Printer size={16}/></button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={()=>{setCurrentReceiptOrder(o);setIsReceiptOpen(true);}} 
+                  className="px-3 py-2 rounded-xl bg-violet-50 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                >
+                  <Edit size={14}/> Edit
+                </button>
+                <button 
+                  onClick={()=>{setCurrentReceiptOrder(o);setIsReceiptOpen(true);}} 
+                  className="w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
+                >
+                  <Printer size={16}/>
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -1563,7 +1826,22 @@ function OrdersView() {
                   <td className="p-5 font-semibold text-slate-800 dark:text-white">{o.customerName}</td>
                   <td className="p-5"><div className="flex gap-2"><span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg text-[10px] font-semibold uppercase">{o.billType}</span>{o.tableNumber && (<span className="px-2.5 py-1 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 rounded-lg text-[10px] font-bold">Table {o.tableNumber}</span>)}<span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg text-[10px] font-semibold uppercase">{o.paymentType}</span></div></td>
                   <td className="p-5 text-right font-bold text-lg text-slate-800 dark:text-white">₹{o.total.toFixed(0)}</td>
-                  <td className="p-5 text-center"><button onClick={(e)=>{e.stopPropagation(); setCurrentReceiptOrder(o);setIsReceiptOpen(true);}} className="bg-slate-50 border border-slate-200 dark:bg-slate-700 dark:border-slate-600 px-4 py-2 rounded-xl font-semibold text-sm text-slate-800 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors cursor-pointer flex items-center justify-center gap-2 mx-auto group-hover:bg-slate-100 dark:group-hover:bg-slate-600"><Printer size={16}/> Print</button></td>
+                  <td className="p-5 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <button 
+                        onClick={(e)=>{e.stopPropagation(); setCurrentReceiptOrder(o); setIsReceiptOpen(true);}} 
+                        className="bg-violet-50 border border-violet-200 dark:bg-violet-900/30 dark:border-violet-800/80 px-3 py-1.5 rounded-xl font-bold text-xs text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <Edit size={14}/> Edit
+                      </button>
+                      <button 
+                        onClick={(e)=>{e.stopPropagation(); setCurrentReceiptOrder(o); setIsReceiptOpen(true);}} 
+                        className="bg-slate-50 border border-slate-200 dark:bg-slate-700 dark:border-slate-600 px-3 py-1.5 rounded-xl font-semibold text-xs text-slate-800 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors cursor-pointer flex items-center justify-center gap-1.5 group-hover:bg-slate-100 dark:group-hover:bg-slate-600"
+                      >
+                        <Printer size={14}/> Print
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -2070,10 +2348,103 @@ function BillQRCode({ className = "w-9 h-9" }: { className?: string }) {
 
 function ReceiptPreviewModal() {
   const context = useAppContext();
-  const { currentReceiptOrder: order, setIsReceiptOpen, settings } = context;
+  const { currentReceiptOrder: order, setIsReceiptOpen, settings, updateOrder, editOrderInPOS, menu, showToast } = context;
 
   const [format, setFormat] = useState(settings.printFormat);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Edit form states
+  const [editedCustomerName, setEditedCustomerName] = useState(order?.customerName || '');
+  const [editedCustomerPhone, setEditedCustomerPhone] = useState(order?.customerPhone || '');
+  const [editedTableNumber, setEditedTableNumber] = useState<number | undefined>(order?.tableNumber);
+  const [editedBillType, setEditedBillType] = useState<'Dine-In' | 'Parcel'>(order?.billType || 'Dine-In');
+  const [editedPaymentType, setEditedPaymentType] = useState<'UPI' | 'Cash' | 'Card'>(order?.paymentType || 'UPI');
+  const [editedItems, setEditedItems] = useState<CartItem[]>(order?.items ? [...order.items] : []);
+  const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('');
+  const [customEntryName, setCustomEntryName] = useState<string>('');
+  const [customEntryPrice, setCustomEntryPrice] = useState<string>('');
+
+  useEffect(() => {
+    if (order) {
+      setEditedCustomerName(order.customerName || '');
+      setEditedCustomerPhone(order.customerPhone || '');
+      setEditedTableNumber(order.tableNumber);
+      setEditedBillType(order.billType || 'Dine-In');
+      setEditedPaymentType(order.paymentType || 'UPI');
+      setEditedItems(order.items ? order.items.map(i => ({ ...i })) : []);
+    }
+  }, [order]);
+
+  const editedSubtotal = useMemo(() => {
+    return editedItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  }, [editedItems]);
+
+  const editedGstAmount = useMemo(() => {
+    return settings.gstPercentage > 0 ? (editedSubtotal * settings.gstPercentage) / 100 : 0;
+  }, [editedSubtotal, settings.gstPercentage]);
+
+  const editedTotal = useMemo(() => {
+    return Math.round(editedSubtotal + editedGstAmount);
+  }, [editedSubtotal, editedGstAmount]);
+
+  const handleUpdateItemQty = (id: string, delta: number) => {
+    setEditedItems(prev => {
+      return prev.map(item => {
+        if (item.id === id) {
+          const newQty = item.quantity + delta;
+          return newQty > 0 ? { ...item, quantity: newQty } : null;
+        }
+        return item;
+      }).filter(Boolean) as CartItem[];
+    });
+  };
+
+  const handleRemoveItem = (id: string) => {
+    setEditedItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleAddItemFromMenu = () => {
+    if (!selectedMenuItemId) return;
+    const item = menu.find(m => m.id === selectedMenuItemId);
+    if (!item) return;
+    setEditedItems(prev => {
+      const existing = prev.find(i => i.id === item.id);
+      if (existing) {
+        return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
+      }
+      return [...prev, { ...item, quantity: 1 }];
+    });
+    setSelectedMenuItemId('');
+  };
+
+  const handleSaveOrder = async () => {
+    if (!order) return;
+    if (editedItems.length === 0) {
+      showToast('A bill must contain at least one item', 'error');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const updatedOrder: Order = {
+        ...order,
+        customerName: editedCustomerName.trim() || 'Walk-in',
+        customerPhone: editedCustomerPhone.trim(),
+        tableNumber: editedTableNumber,
+        billType: editedBillType,
+        paymentType: editedPaymentType,
+        items: editedItems,
+        subtotal: editedSubtotal,
+        gstAmount: editedGstAmount,
+        total: editedTotal,
+      };
+      await updateOrder(updatedOrder);
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setFormat(e.target.value as Settings['printFormat']);
@@ -2114,71 +2485,355 @@ function ReceiptPreviewModal() {
 
       <div className="bg-white dark:bg-slate-900 w-full max-w-4xl sm:rounded-[2.5rem] shadow-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden flex flex-col md:flex-row h-full sm:h-[90vh] print:h-auto print:block print:border-none print:shadow-none animate-scale-up print:overflow-visible">
         
-        {/* Preview Scrollable Area */}
+        {/* Preview / Edit Scrollable Area */}
         <div className="flex-1 p-4 sm:p-8 overflow-y-auto print:p-0 custom-scroll bg-slate-100 dark:bg-slate-950 flex flex-col items-center">
-          <div className="w-full max-w-md flex justify-between items-center mb-5 print:hidden">
-            <span className="text-xs font-black tracking-wider uppercase text-slate-500 dark:text-slate-400">
-              Receipt Preview
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500">Format:</span>
-              <select 
-                value={format} 
-                onChange={handleSelectChange} 
-                className="bg-white dark:bg-slate-800 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white outline-none shadow-sm border border-slate-200 dark:border-slate-700 cursor-pointer"
+          
+          {/* Top Bar with Mode Switcher & Format Selector */}
+          <div className="w-full max-w-xl flex justify-between items-center mb-5 print:hidden">
+            <div className="flex items-center gap-1 p-1 bg-slate-200/80 dark:bg-slate-800 rounded-2xl">
+              <button 
+                type="button"
+                onClick={() => setIsEditing(false)} 
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  !isEditing 
+                    ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-xs' 
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
               >
-                <option value="thermal">Thermal Roll (80mm)</option>
-                <option value="a4">A4 Invoice</option>
-                <option value="kot">Kitchen Ticket (KOT)</option>
-              </select>
+                Receipt Preview
+              </button>
+              <button 
+                type="button"
+                onClick={() => setIsEditing(true)} 
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  isEditing 
+                    ? 'bg-violet-600 text-white shadow-xs' 
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                <Edit size={13}/> Edit Bill
+              </button>
             </div>
+
+            {!isEditing && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500">Format:</span>
+                <select 
+                  value={format} 
+                  onChange={handleSelectChange} 
+                  className="bg-white dark:bg-slate-800 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white outline-none shadow-sm border border-slate-200 dark:border-slate-700 cursor-pointer"
+                >
+                  <option value="thermal">Thermal Roll (80mm)</option>
+                  <option value="a4">A4 Invoice</option>
+                  <option value="kot">Kitchen Ticket (KOT)</option>
+                </select>
+              </div>
+            )}
           </div>
           
-          {/* THE RECEIPT CARD - Clean Crisp White Background with Large Readable Typography */}
-          <div 
-            id="print-area" 
-            className={`transition-all select-none print:select-auto ${
-              format === 'thermal'
-                ? 'w-full max-w-[420px] sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-200 text-stone-900 font-sans'
-                : format === 'kot'
-                ? 'w-full max-w-[420px] sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-200 text-stone-900 font-sans'
-                : 'w-full max-w-[210mm] min-h-[297mm] p-10 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-200 text-stone-900 font-sans'
-            }`}
-          >
-            {/* THERMAL ROLL FORMAT — Refined Font Weights with Clean Hierarchy */}
+          {/* EDIT BILL MODE */}
+          {isEditing ? (
+            <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-200/80 dark:border-slate-800 animate-pop-in space-y-6">
+              <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                      <Edit className="text-violet-600" size={22}/> Edit Bill {order.billNumber}
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium mt-1">
+                      Update dining table, customer details, add/remove items or adjust quantities.
+                    </p>
+                  </div>
+                  <span className="px-3 py-1 bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 font-extrabold text-xs rounded-full">
+                    Active Edit
+                  </span>
+                </div>
+              </div>
+
+              {/* Order Metadata Form */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Customer Name
+                  </label>
+                  <input 
+                    type="text" 
+                    value={editedCustomerName} 
+                    onChange={e => setEditedCustomerName(e.target.value)}
+                    placeholder="Walk-in / Customer name"
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Phone Number
+                  </label>
+                  <input 
+                    type="text" 
+                    value={editedCustomerPhone} 
+                    onChange={e => setEditedCustomerPhone(e.target.value)}
+                    placeholder="Optional phone number"
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Table / Order Type
+                  </label>
+                  <select 
+                    value={editedTableNumber !== undefined ? String(editedTableNumber) : 'takeaway'}
+                    onChange={e => {
+                      if (e.target.value === 'takeaway') {
+                        setEditedTableNumber(undefined);
+                        setEditedBillType('Parcel');
+                      } else {
+                        const tbl = parseInt(e.target.value, 10);
+                        setEditedTableNumber(tbl);
+                        setEditedBillType('Dine-In');
+                      }
+                    }}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
+                  >
+                    <option value="takeaway">Takeaway / Parcel Counter</option>
+                    <option value="1">Table 1 (Type A)</option>
+                    <option value="2">Table 2 (Type B)</option>
+                    <option value="3">Table 3 (Type C)</option>
+                    <option value="4">Table 4 (Type D)</option>
+                    <option value="5">Table 5 (Type E)</option>
+                    <option value="6">Table 6 (Type F)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Payment Method
+                  </label>
+                  <select 
+                    value={editedPaymentType}
+                    onChange={e => setEditedPaymentType(e.target.value as 'UPI' | 'Cash' | 'Card')}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
+                  >
+                    <option value="UPI">UPI</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Card">Card</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Items List Header */}
+              <div>
+                <div className="flex justify-between items-center mb-2 px-1">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Order Items ({editedItems.length})
+                  </span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Qty &amp; Amount
+                  </span>
+                </div>
+
+                {/* Items List */}
+                <div className="space-y-2 max-h-60 overflow-y-auto custom-scroll pr-1">
+                  {editedItems.map(item => (
+                    <div 
+                      key={item.id} 
+                      className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 gap-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{item.name}</p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-xs font-bold text-slate-400">₹</span>
+                          <input 
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={item.price}
+                            onChange={e => {
+                              const val = parseFloat(e.target.value);
+                              setEditedItems(prev => prev.map(i => i.id === item.id ? { ...i, price: isNaN(val) ? 0 : val } : i));
+                            }}
+                            className="w-20 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:border-violet-500 rounded-lg px-2 py-0.5 text-xs font-bold text-slate-900 dark:text-white outline-none"
+                            title="Edit manual price"
+                          />
+                          <span className="text-[10px] text-slate-400 font-medium">/ unit</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex items-center bg-white dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 p-0.5 shadow-xs">
+                          <button 
+                            type="button" 
+                            onClick={() => handleUpdateItemQty(item.id, -1)} 
+                            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-white font-bold transition-colors cursor-pointer"
+                          >
+                            <Minus size={13}/>
+                          </button>
+                          <span className="w-8 text-center text-xs font-black text-slate-800 dark:text-white">{item.quantity}</span>
+                          <button 
+                            type="button" 
+                            onClick={() => handleUpdateItemQty(item.id, 1)} 
+                            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-white font-bold transition-colors cursor-pointer"
+                          >
+                            <Plus size={13}/>
+                          </button>
+                        </div>
+
+                        <span className="font-black text-sm text-slate-900 dark:text-white w-16 text-right">
+                          ₹{(item.price * item.quantity).toFixed(2)}
+                        </span>
+
+                        <button 
+                          type="button" 
+                          onClick={() => handleRemoveItem(item.id)} 
+                          className="text-rose-500 hover:text-rose-700 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                          title="Remove item from bill"
+                        >
+                          <Trash2 size={16}/>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {editedItems.length === 0 && (
+                    <div className="text-center py-6 text-sm text-rose-500 font-bold bg-rose-50 dark:bg-rose-950/20 rounded-2xl border border-rose-200 dark:border-rose-900/40">
+                      No items left in bill. Please add an item from menu below.
+                    </div>
+                  )}
+                </div>
+
+                {/* Add Item From Menu */}
+                <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <select 
+                    value={selectedMenuItemId}
+                    onChange={e => setSelectedMenuItemId(e.target.value)}
+                    className="flex-1 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
+                  >
+                    <option value="">-- Add an item from menu --</option>
+                    {menu.filter(m => m.isAvailable !== false).map(m => (
+                      <option key={m.id} value={m.id}>{m.name} (₹{m.price})</option>
+                    ))}
+                  </select>
+                  <button 
+                    type="button"
+                    disabled={!selectedMenuItemId}
+                    onClick={handleAddItemFromMenu}
+                    className="bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                  >
+                    <Plus size={15}/> Add to Bill
+                  </button>
+                </div>
+
+                {/* Add Custom Manual Item Row */}
+                <div className="flex flex-col sm:flex-row items-center gap-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/60">
+                  <input 
+                    type="text"
+                    placeholder="Custom Item Name (e.g. Special Dish)"
+                    value={customEntryName}
+                    onChange={e => setCustomEntryName(e.target.value)}
+                    className="flex-1 w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500"
+                  />
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5">
+                      <span className="text-xs font-bold text-slate-400">₹</span>
+                      <input 
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="Price"
+                        value={customEntryPrice}
+                        onChange={e => setCustomEntryPrice(e.target.value)}
+                        className="w-20 bg-transparent text-xs font-bold text-slate-800 dark:text-white outline-none"
+                      />
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const p = parseFloat(customEntryPrice);
+                        if (!isNaN(p) && p >= 0) {
+                          setEditedItems(prev => [...prev, {
+                            id: `custom-${Date.now()}`,
+                            name: customEntryName.trim() || 'Custom Item',
+                            price: p,
+                            quantity: 1,
+                            category: 'Custom',
+                            isAvailable: true
+                          }]);
+                          setCustomEntryName('');
+                          setCustomEntryPrice('');
+                        } else {
+                          showToast('Please enter a valid price', 'error');
+                        }
+                      }}
+                      className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                    >
+                      <Plus size={13}/> Custom ₹
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Total Calculation Box */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  <span>Subtotal</span>
+                  <span className="font-bold text-slate-900 dark:text-white">₹{editedSubtotal.toFixed(2)}</span>
+                </div>
+                {settings.gstPercentage > 0 && (
+                  <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    <span>GST ({settings.gstPercentage}%)</span>
+                    <span className="font-bold text-slate-900 dark:text-white">₹{editedGstAmount.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-baseline pt-2 border-t border-slate-200 dark:border-slate-700">
+                  <span className="text-sm font-extrabold text-slate-800 dark:text-white">Updated Total</span>
+                  <span className="text-2xl font-black text-violet-600 dark:text-violet-400">₹{editedTotal.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* THE RECEIPT CARD - Clean Crisp White Background with Large Readable Typography */
+            <div 
+              id="print-area" 
+              className={`transition-all select-none print:select-auto ${
+                format === 'thermal'
+                  ? 'w-full max-w-[420px] sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
+                  : format === 'kot'
+                  ? 'w-full max-w-[420px] sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
+                  : 'w-full max-w-[210mm] min-h-[297mm] p-10 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
+              }`}
+            >
+            {/* THERMAL ROLL FORMAT — Crisp, High-Contrast Dark Text */}
             {format === 'thermal' && (
               <div>
                 {/* Brand Name in Single Line (No Logo) */}
                 <div className="text-center pb-1">
-                  <h1 className="text-2xl sm:text-[27px] font-extrabold uppercase tracking-tight text-stone-900 leading-tight whitespace-nowrap">
+                  <h1 className="text-2xl sm:text-[27px] font-black uppercase tracking-tight text-black leading-tight whitespace-nowrap">
                     {settings.hotelName || 'VETRIVEL UNAVAGAM'}
                   </h1>
-                  <p className="text-xs sm:text-[13px] text-stone-500 font-normal leading-snug mt-1">
+                  <p className="text-xs sm:text-[13px] text-stone-900 font-semibold leading-snug mt-1">
                     {settings.address || '87/92 VCV Road, RS Puram, Coimbatore - 641002'}
                   </p>
-                  <p className="text-xs sm:text-[13px] font-medium text-stone-700 leading-snug mt-0.5">
+                  <p className="text-xs sm:text-[13px] font-bold text-black leading-snug mt-0.5">
                     Tel: {settings.phone || '+91 98429 99931'}
                   </p>
                 </div>
 
                 {/* Solid Divider */}
-                <div className="border-b border-stone-800 my-3.5"></div>
+                <div className="border-b-2 border-black my-3.5"></div>
 
-                {/* Bill Metadata Grid with Clear Font-Weight Hierarchy */}
+                {/* Bill Metadata Grid with High-Contrast Dark Text */}
                 <div className="text-sm sm:text-[14.5px] leading-relaxed">
                   <div className="flex justify-between items-start gap-3">
                     <div className="space-y-1">
                       <div className="flex gap-2">
-                        <span className="font-normal text-stone-500 w-16">Bill No:</span>
-                        <span className="font-bold text-stone-900">{order.billNumber}</span>
+                        <span className="font-semibold text-stone-800 w-16">Bill No:</span>
+                        <span className="font-bold text-black">{order.billNumber}</span>
                       </div>
                       <div className="flex gap-2">
-                        <span className="font-normal text-stone-500 w-16">Type:</span>
-                        <span className="font-bold text-stone-900">{order.billType}</span>
+                        <span className="font-semibold text-stone-800 w-16">Type:</span>
+                        <span className="font-bold text-black">{order.billType}</span>
                       </div>
                       <div className="flex gap-2">
-                        <span className="font-normal text-stone-500 w-16">Table:</span>
-                        <span className="font-bold text-stone-900">
+                        <span className="font-semibold text-stone-800 w-16">Table:</span>
+                        <span className="font-bold text-black">
                           {order.tableNumber
                             ? (order.customerName && order.customerName !== 'Walk-in'
                                 ? `Table ${order.tableNumber} (Type ${String.fromCharCode(64 + order.tableNumber)}) • ${order.customerName}`
@@ -2190,38 +2845,38 @@ function ReceiptPreviewModal() {
 
                     <div className="space-y-1 text-right">
                       <div className="flex justify-end gap-2">
-                        <span className="font-normal text-stone-500">Date:</span>
-                        <span className="font-bold text-stone-900">{order.date}</span>
+                        <span className="font-semibold text-stone-800">Date:</span>
+                        <span className="font-bold text-black">{order.date}</span>
                       </div>
                       <div className="flex justify-end gap-2">
-                        <span className="font-normal text-stone-500">Time:</span>
-                        <span className="font-bold text-stone-900">{order.time}</span>
+                        <span className="font-semibold text-stone-800">Time:</span>
+                        <span className="font-bold text-black">{order.time}</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Dashed Divider */}
-                <div className="border-b border-dashed border-stone-300 my-3.5"></div>
+                <div className="border-b border-dashed border-stone-500 my-3.5"></div>
 
-                {/* Items Table with Clear Font Weights */}
+                {/* Items Table with Crisp Dark Text */}
                 <div className="pt-0.5">
                   <table className="w-full text-left">
                     <thead>
-                      <tr className="text-xs sm:text-[13px] font-bold uppercase tracking-wider text-stone-800 border-b border-stone-300">
-                        <th className="pb-2 font-bold text-left">ITEM</th>
-                        <th className="pb-2 font-bold text-center w-12">QTY</th>
-                        <th className="pb-2 font-bold text-right w-20">PRICE</th>
-                        <th className="pb-2 font-bold text-right w-24">AMOUNT</th>
+                      <tr className="text-xs sm:text-[13px] font-black uppercase tracking-wider text-black border-b-2 border-black">
+                        <th className="pb-2 font-black text-left">ITEM</th>
+                        <th className="pb-2 font-black text-center w-12">QTY</th>
+                        <th className="pb-2 font-black text-right w-20">PRICE</th>
+                        <th className="pb-2 font-black text-right w-24">AMOUNT</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-stone-100">
+                    <tbody className="divide-y divide-stone-200">
                       {order.items.map((i: CartItem) => (
-                        <tr key={i.id} className="text-stone-900 text-sm sm:text-[14.5px]">
-                          <td className="py-2.5 pr-2 font-medium leading-snug text-stone-900">{i.name}</td>
-                          <td className="py-2.5 text-center font-normal text-stone-600">{i.quantity}</td>
-                          <td className="py-2.5 text-right font-normal text-stone-600">{i.price.toFixed(2)}</td>
-                          <td className="py-2.5 text-right font-bold text-stone-900">₹{(i.price * i.quantity).toFixed(2)}</td>
+                        <tr key={i.id} className="text-black text-sm sm:text-[14.5px]">
+                          <td className="py-2.5 pr-2 font-bold leading-snug text-black">{i.name}</td>
+                          <td className="py-2.5 text-center font-bold text-stone-900">{i.quantity}</td>
+                          <td className="py-2.5 text-right font-bold text-stone-900">{i.price.toFixed(2)}</td>
+                          <td className="py-2.5 text-right font-black text-black">₹{(i.price * i.quantity).toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -2229,39 +2884,39 @@ function ReceiptPreviewModal() {
                 </div>
 
                 {/* Dashed Divider */}
-                <div className="border-b border-dashed border-stone-300 my-3.5"></div>
+                <div className="border-b border-dashed border-stone-500 my-3.5"></div>
 
                 {/* Subtotal, GST & Total */}
                 <div className="py-1 space-y-1">
                   <div className="flex justify-between text-sm sm:text-[14px]">
-                    <span className="ml-auto pr-8 font-normal text-stone-500">Subtotal</span>
-                    <span className="w-28 text-right font-medium text-stone-900">₹{order.subtotal.toFixed(2)}</span>
+                    <span className="ml-auto pr-8 font-semibold text-stone-800">Subtotal</span>
+                    <span className="w-28 text-right font-bold text-black">₹{order.subtotal.toFixed(2)}</span>
                   </div>
                   {settings.gstPercentage > 0 && order.gstAmount > 0 && (
                     <div className="flex justify-between text-sm sm:text-[14px]">
-                      <span className="ml-auto pr-8 font-normal text-stone-500">GST ({settings.gstPercentage}%)</span>
-                      <span className="w-28 text-right font-medium text-stone-900">₹{order.gstAmount.toFixed(2)}</span>
+                      <span className="ml-auto pr-8 font-semibold text-stone-800">GST ({settings.gstPercentage}%)</span>
+                      <span className="w-28 text-right font-bold text-black">₹{order.gstAmount.toFixed(2)}</span>
                     </div>
                   )}
-                  <div className="border-b border-stone-800 my-2.5"></div>
-                  <div className="flex justify-between items-baseline text-stone-900 pt-1">
-                    <span className="ml-auto pr-8 text-lg sm:text-xl font-bold tracking-tight text-stone-900">TOTAL</span>
-                    <span className="w-36 text-right text-2xl sm:text-[27px] font-extrabold tracking-tight text-stone-900">₹{order.total.toFixed(2)}</span>
+                  <div className="border-b-2 border-black my-2.5"></div>
+                  <div className="flex justify-between items-baseline text-black pt-1">
+                    <span className="ml-auto pr-8 text-lg sm:text-xl font-black tracking-tight text-black">TOTAL</span>
+                    <span className="w-36 text-right text-2xl sm:text-[27px] font-black tracking-tight text-black">₹{order.total.toFixed(2)}</span>
                   </div>
                 </div>
 
                 {/* Solid Divider */}
-                <div className="border-b border-stone-800 my-3.5"></div>
+                <div className="border-b-2 border-black my-3.5"></div>
 
-                {/* Bottom Bar: Centered Payment Pill (Light-bold / bold border) */}
+                {/* Bottom Bar: Centered Payment Pill (Bold Dark) */}
                 <div className="flex items-center justify-center pt-1">
-                  <div className="inline-flex items-center px-4 py-1.5 rounded-full border border-stone-800 text-xs sm:text-[12.5px] font-bold uppercase tracking-wider text-stone-900 bg-transparent">
+                  <div className="inline-flex items-center px-4 py-1.5 rounded-full border-2 border-black text-xs sm:text-[12.5px] font-black uppercase tracking-wider text-black bg-transparent">
                     PAID VIA {order.paymentType || 'UPI'}
                   </div>
                 </div>
 
-                {/* Centered Footer Message (Light / Medium) */}
-                <p className="text-center text-xs sm:text-[12px] font-medium uppercase tracking-wider text-stone-500 mt-4 leading-normal">
+                {/* Centered Footer Message (Darker, High Legibility) */}
+                <p className="text-center text-xs sm:text-[12px] font-bold uppercase tracking-wider text-stone-900 mt-4 leading-normal">
                   {settings.footerMessage || 'NO BRANCHES • THANK YOU FOR CHOOSING VETRIVEL UNAVAGAM'}
                 </p>
               </div>
@@ -2397,17 +3052,22 @@ function ReceiptPreviewModal() {
               </div>
             )}
           </div>
-        </div>
+        )}
+      </div>
 
         {/* Modal Controls Sidebar */}
         <div className="bg-white dark:bg-slate-900 p-6 w-full md:w-80 flex flex-col print:hidden border-t md:border-t-0 md:border-l border-slate-200/80 dark:border-slate-800 shrink-0">
           <div className="mb-auto">
             <div className="flex items-center gap-2 mb-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <h4 className="font-extrabold text-2xl text-slate-800 dark:text-white">Print Receipt</h4>
+              <span className={`w-2.5 h-2.5 rounded-full ${isEditing ? 'bg-violet-500' : 'bg-emerald-500'} animate-pulse`}></span>
+              <h4 className="font-extrabold text-2xl text-slate-800 dark:text-white">
+                {isEditing ? 'Edit Bill' : 'Print Receipt'}
+              </h4>
             </div>
             <p className="text-xs text-slate-500 font-medium mb-6">
-              Vetrivel Unavagam authentic theme matched to your thermal printer paper.
+              {isEditing 
+                ? 'Update order items, customer, table type or payment method.' 
+                : 'Vetrivel Unavagam authentic theme matched to your thermal printer paper.'}
             </p>
 
             <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-700/60 space-y-2 mb-6">
@@ -2418,34 +3078,78 @@ function ReceiptPreviewModal() {
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500">Table:</span>
                 <span className="font-bold text-slate-800 dark:text-white">
-                  {order.tableNumber ? `Table ${order.tableNumber} (Type ${String.fromCharCode(64 + order.tableNumber)})` : 'Takeaway'}
+                  {(isEditing ? editedTableNumber : order.tableNumber) 
+                    ? `Table ${isEditing ? editedTableNumber : order.tableNumber} (Type ${String.fromCharCode(64 + ((isEditing ? editedTableNumber : order.tableNumber) || 1))})` 
+                    : 'Takeaway'}
                 </span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500">Payment:</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">{order.paymentType}</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  {isEditing ? editedPaymentType : order.paymentType}
+                </span>
               </div>
               <div className="flex justify-between text-xs pt-1 border-t border-slate-200 dark:border-slate-700">
                 <span className="font-semibold text-slate-700 dark:text-slate-300">Total Amount:</span>
-                <span className="font-black text-slate-900 dark:text-white text-sm">₹{order.total.toFixed(2)}</span>
+                <span className="font-black text-slate-900 dark:text-white text-base">
+                  ₹{(isEditing ? editedTotal : order.total).toFixed(2)}
+                </span>
               </div>
             </div>
           </div>
 
           <div className="space-y-3">
-            <button 
-              onClick={handlePrint} 
-              disabled={isPrinting} 
-              className="w-full bg-stone-900 hover:bg-stone-800 active:scale-[0.98] text-white font-black text-base py-4 rounded-2xl shadow-xl shadow-stone-900/20 flex justify-center items-center gap-2 transition-all cursor-pointer"
-            >
-              <Printer size={18}/> Print Slip
-            </button>
-            <button 
-              onClick={()=>setIsReceiptOpen(false)} 
-              className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 active:scale-[0.98] text-slate-700 dark:text-slate-300 font-bold text-sm py-3.5 rounded-2xl transition-all cursor-pointer"
-            >
-              Close
-            </button>
+            {isEditing ? (
+              <>
+                <button 
+                  onClick={handleSaveOrder} 
+                  disabled={isSaving} 
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-black text-base py-4 rounded-2xl shadow-xl shadow-emerald-600/20 flex justify-center items-center gap-2 transition-all cursor-pointer"
+                >
+                  <Check size={18}/> {isSaving ? 'Saving Changes...' : 'Save & Update Bill'}
+                </button>
+                <button 
+                  onClick={() => editOrderInPOS(order)} 
+                  className="w-full bg-violet-600 hover:bg-violet-700 active:scale-[0.98] text-white font-bold text-sm py-3 rounded-2xl shadow-lg shadow-violet-500/20 flex justify-center items-center gap-2 transition-all cursor-pointer"
+                >
+                  <ShoppingCart size={16}/> Edit in Terminal
+                </button>
+                <button 
+                  onClick={() => setIsEditing(false)} 
+                  className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 active:scale-[0.98] text-slate-700 dark:text-slate-300 font-bold text-sm py-3 rounded-2xl transition-all cursor-pointer flex justify-center items-center gap-1.5"
+                >
+                  <X size={16}/> Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button 
+                  onClick={handlePrint} 
+                  disabled={isPrinting} 
+                  className="w-full bg-stone-900 hover:bg-stone-800 active:scale-[0.98] text-white font-black text-base py-4 rounded-2xl shadow-xl shadow-stone-900/20 flex justify-center items-center gap-2 transition-all cursor-pointer"
+                >
+                  <Printer size={18}/> Print Slip
+                </button>
+                <button 
+                  onClick={() => setIsEditing(true)} 
+                  className="w-full bg-violet-600 hover:bg-violet-700 active:scale-[0.98] text-white font-bold text-sm py-3.5 rounded-2xl shadow-lg shadow-violet-500/20 flex justify-center items-center gap-2 transition-all cursor-pointer"
+                >
+                  <Edit size={16}/> Edit Bill
+                </button>
+                <button 
+                  onClick={() => editOrderInPOS(order)} 
+                  className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 active:scale-[0.98] text-slate-700 dark:text-slate-300 font-bold text-xs py-2.5 rounded-xl transition-all cursor-pointer flex justify-center items-center gap-1.5"
+                >
+                  <ShoppingCart size={14}/> Re-open in Terminal
+                </button>
+                <button 
+                  onClick={() => setIsReceiptOpen(false)} 
+                  className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 active:scale-[0.98] text-slate-700 dark:text-slate-300 font-bold text-sm py-3 rounded-2xl transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

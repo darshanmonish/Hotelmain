@@ -1,15 +1,23 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Minus, ShoppingCart, Trash2, ChevronRight, Utensils, MapPin, Coins, CreditCard, X, Printer } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Search, Plus, Minus, ShoppingCart, Trash2, ChevronRight, Utensils, MapPin, Coins, CreditCard, X, Printer, Edit, PlusCircle, Check } from 'lucide-react';
 import { useAppContext } from '@/contexts/AppContext';
 import type { MenuItem, CartItem, Order } from '@/types';
 
 export default function POSView() {
-  const { menu, cart, addToCart, removeFromCart, clearCart, settings, addOrder } = useAppContext();
+  const { menu, cart, addToCart, removeFromCart, clearCart, updateCartItemPrice, addCustomCartItem, settings, addOrder, showToast } = useAppContext();
 
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('All');
   const [isCheckout, setIsCheckout] = useState(false);
   
+  // Custom manual price editing
+  const [editingPriceItemId, setEditingPriceItemId] = useState<string | null>(null);
+  const [tempPrice, setTempPrice] = useState('');
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customPrice, setCustomPrice] = useState('');
+
   const [cName, setCName] = useState('');
   const [cPhone, setCPhone] = useState('');
   const [bType, setBType] = useState<Order['billType']>('Dine-In'); 
@@ -111,7 +119,17 @@ export default function POSView() {
         <div className="p-5 lg:p-6 flex flex-col h-full">
           <div className="flex justify-between items-center mb-5">
             <h3 className="font-extrabold text-xl text-slate-800 dark:text-white flex items-center gap-2.5"><ShoppingCart className="text-violet-500"/> Ticket</h3>
-            {cart.length > 0 && <button onClick={clearCart} className="text-slate-400 hover:text-rose-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"><Trash2 size={14}/> Clear</button>}
+            <div className="flex items-center gap-2">
+              <button 
+                type="button" 
+                onClick={() => setShowCustomModal(true)} 
+                className="text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 hover:bg-violet-100 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                title="Add custom item with manual specific price"
+              >
+                <PlusCircle size={13}/> Custom ₹
+              </button>
+              {cart.length > 0 && <button onClick={clearCart} className="text-slate-400 hover:text-rose-500 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"><Trash2 size={14}/> Clear</button>}
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-3 hide-scrollbar min-h-[150px] pr-1">
@@ -121,7 +139,58 @@ export default function POSView() {
               <div key={item.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-700/50 hover-scale">
                 <div className="flex-1 min-w-0 pr-3">
                   <p className="font-semibold text-slate-800 dark:text-white text-sm truncate">{item.name}</p>
-                  <p className="text-[11px] font-medium text-slate-500 mt-1">₹{item.price}</p>
+                  {editingPriceItemId === item.id ? (
+                    <div className="flex items-center gap-1 mt-1" onClick={e => e.stopPropagation()}>
+                      <span className="text-xs font-bold text-slate-400">₹</span>
+                      <input 
+                        type="number"
+                        min="0"
+                        step="any"
+                        autoFocus
+                        value={tempPrice}
+                        onChange={e => setTempPrice(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            const val = parseFloat(tempPrice);
+                            if (!isNaN(val) && val >= 0) updateCartItemPrice(item.id, val);
+                            setEditingPriceItemId(null);
+                          } else if (e.key === 'Escape') {
+                            setEditingPriceItemId(null);
+                          }
+                        }}
+                        onBlur={() => {
+                          const val = parseFloat(tempPrice);
+                          if (!isNaN(val) && val >= 0) updateCartItemPrice(item.id, val);
+                          setEditingPriceItemId(null);
+                        }}
+                        className="w-16 bg-white dark:bg-slate-700 border-2 border-violet-500 rounded-lg px-1.5 py-0.5 text-xs font-black text-slate-900 dark:text-white outline-none"
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          const val = parseFloat(tempPrice);
+                          if (!isNaN(val) && val >= 0) updateCartItemPrice(item.id, val);
+                          setEditingPriceItemId(null);
+                        }}
+                        className="p-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer"
+                      >
+                        <Check size={11}/>
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setEditingPriceItemId(item.id);
+                        setTempPrice(String(item.price));
+                      }}
+                      title="Click to edit manual price"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-600 dark:text-violet-400 bg-violet-50 hover:bg-violet-100 dark:bg-violet-900/30 dark:hover:bg-violet-900/60 px-1.5 py-0.5 rounded-md mt-1 transition-colors cursor-pointer group"
+                    >
+                      <span>₹{item.price}</span>
+                      <Edit size={10} className="opacity-60 group-hover:opacity-100"/>
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden soft-shadow">
@@ -129,7 +198,7 @@ export default function POSView() {
                     <span className="w-6 text-center font-bold text-sm">{item.quantity}</span>
                     <button onClick={()=>addToCart(item)} className="w-8 h-8 flex justify-center items-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Plus size={14} strokeWidth={3}/></button>
                   </div>
-                  <div className="w-12 text-right font-bold text-slate-800 dark:text-white">₹{item.price * item.quantity}</div>
+                  <div className="w-12 text-right font-bold text-slate-800 dark:text-white">₹{(item.price * item.quantity).toFixed(0)}</div>
                 </div>
               </div>
             ))}
@@ -203,6 +272,71 @@ export default function POSView() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Custom Item / Manual Price Modal */}
+      {showCustomModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={() => setShowCustomModal(false)}>
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-sm shadow-2xl border border-slate-200 dark:border-slate-700 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center">
+              <h4 className="font-extrabold text-lg text-slate-800 dark:text-white flex items-center gap-2">
+                <Coins size={18} className="text-violet-500"/> Custom Manual Item
+              </h4>
+              <button onClick={() => setShowCustomModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer">
+                <X size={18}/>
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Item Name</label>
+              <input 
+                type="text" 
+                placeholder="e.g. Special Dish / Extra Gravy" 
+                value={customName} 
+                onChange={e => setCustomName(e.target.value)} 
+                className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500" 
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Specific Custom Price (₹)</label>
+              <input 
+                type="number" 
+                min="0" 
+                step="any" 
+                placeholder="e.g. 150" 
+                value={customPrice} 
+                onChange={e => setCustomPrice(e.target.value)} 
+                className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3.5 py-2.5 text-sm font-black text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-violet-500" 
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button 
+                type="button" 
+                onClick={() => {
+                  const priceVal = parseFloat(customPrice);
+                  if (!isNaN(priceVal) && priceVal >= 0) {
+                    addCustomCartItem(customName || 'Custom Item', priceVal);
+                    setCustomName('');
+                    setCustomPrice('');
+                    setShowCustomModal(false);
+                  } else {
+                    showToast('Please enter a valid price', 'error');
+                  }
+                }} 
+                className="flex-1 bg-violet-600 hover:bg-violet-700 text-white font-bold text-sm py-3 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-violet-500/25"
+              >
+                <Plus size={16}/> Add to Ticket
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setShowCustomModal(false)} 
+                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-bold text-sm px-4 py-3 rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

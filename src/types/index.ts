@@ -115,10 +115,14 @@ export interface AppContextType {
   toggleAvailability: (id: string) => void;
   orders: Order[];
   addOrder: (orderData: OrderData, skipPrint?: boolean) => void;
+  updateOrder: (order: Order) => Promise<void>;
+  editOrderInPOS: (order: Order) => void;
   cart: CartItem[];
   addToCart: (item: MenuItem) => void;
   removeFromCart: (id: string) => void;
   clearCart: () => void;
+  updateCartItemPrice: (id: string, newPrice: number) => void;
+  addCustomCartItem: (name: string, price: number) => void;
   toasts: Toast[];
   showToast: (message: string, type?: Toast['type']) => void;
   removeToast: (id: number) => void;

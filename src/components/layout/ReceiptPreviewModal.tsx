@@ -80,40 +80,40 @@ export default function ReceiptPreviewModal() {
                 : 'w-full max-w-[210mm] min-h-[297mm] p-10 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-200 text-stone-900 font-sans'
             }`}
           >
-            {/* THERMAL ROLL FORMAT — Single-Line Brand Name, Large Easy-to-Read Fonts, No Logo/Feedback/QR */}
+            {/* THERMAL ROLL FORMAT — Refined Font Weights with Clean Hierarchy */}
             {format === 'thermal' && (
               <div>
                 {/* Brand Name in Single Line (No Logo) */}
                 <div className="text-center pb-1">
-                  <h1 className="text-2xl sm:text-[28px] md:text-[32px] font-black uppercase tracking-tight text-stone-900 leading-tight whitespace-nowrap">
+                  <h1 className="text-2xl sm:text-[27px] font-extrabold uppercase tracking-tight text-stone-900 leading-tight whitespace-nowrap">
                     {settings.hotelName || 'VETRIVEL UNAVAGAM'}
                   </h1>
-                  <p className="text-xs sm:text-[14px] text-stone-700 font-medium leading-snug mt-1.5">
+                  <p className="text-xs sm:text-[13px] text-stone-500 font-normal leading-snug mt-1">
                     {settings.address || '87/92 VCV Road, RS Puram, Coimbatore - 641002'}
                   </p>
-                  <p className="text-xs sm:text-[14px] font-bold text-stone-800 leading-snug mt-0.5">
+                  <p className="text-xs sm:text-[13px] font-medium text-stone-700 leading-snug mt-0.5">
                     Tel: {settings.phone || '+91 98429 99931'}
                   </p>
                 </div>
 
                 {/* Solid Divider */}
-                <div className="border-b-2 border-stone-800 my-4"></div>
+                <div className="border-b border-stone-800 my-3.5"></div>
 
-                {/* Bill Metadata Grid with Larger Readable Font */}
-                <div className="text-[14.5px] sm:text-[15.5px] leading-relaxed">
+                {/* Bill Metadata Grid with Clear Font-Weight Hierarchy */}
+                <div className="text-sm sm:text-[14.5px] leading-relaxed">
                   <div className="flex justify-between items-start gap-3">
                     <div className="space-y-1">
-                      <div className="flex gap-2.5">
-                        <span className="font-bold text-stone-600 w-18">Bill No:</span>
-                        <span className="font-black text-stone-900">{order.billNumber}</span>
+                      <div className="flex gap-2">
+                        <span className="font-normal text-stone-500 w-16">Bill No:</span>
+                        <span className="font-bold text-stone-900">{order.billNumber}</span>
                       </div>
-                      <div className="flex gap-2.5">
-                        <span className="font-bold text-stone-600 w-18">Type:</span>
-                        <span className="font-black text-stone-900">{order.billType}</span>
+                      <div className="flex gap-2">
+                        <span className="font-normal text-stone-500 w-16">Type:</span>
+                        <span className="font-bold text-stone-900">{order.billType}</span>
                       </div>
-                      <div className="flex gap-2.5">
-                        <span className="font-bold text-stone-600 w-18">Table:</span>
-                        <span className="font-black text-stone-900">
+                      <div className="flex gap-2">
+                        <span className="font-normal text-stone-500 w-16">Table:</span>
+                        <span className="font-bold text-stone-900">
                           {order.tableNumber
                             ? (order.customerName && order.customerName !== 'Walk-in'
                                 ? `Table ${order.tableNumber} (Type ${String.fromCharCode(64 + order.tableNumber)}) • ${order.customerName}`
@@ -125,38 +125,38 @@ export default function ReceiptPreviewModal() {
 
                     <div className="space-y-1 text-right">
                       <div className="flex justify-end gap-2">
-                        <span className="font-bold text-stone-600">Date:</span>
-                        <span className="font-black text-stone-900">{order.date}</span>
+                        <span className="font-normal text-stone-500">Date:</span>
+                        <span className="font-bold text-stone-900">{order.date}</span>
                       </div>
                       <div className="flex justify-end gap-2">
-                        <span className="font-bold text-stone-600">Time:</span>
-                        <span className="font-black text-stone-900">{order.time}</span>
+                        <span className="font-normal text-stone-500">Time:</span>
+                        <span className="font-bold text-stone-900">{order.time}</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Dashed Divider */}
-                <div className="border-b-2 border-dashed border-stone-400 my-4"></div>
+                <div className="border-b border-dashed border-stone-300 my-3.5"></div>
 
-                {/* Items Table (Itemized Order Heading Removed) */}
+                {/* Items Table with Clear Font Weights */}
                 <div className="pt-0.5">
                   <table className="w-full text-left">
                     <thead>
-                      <tr className="text-xs sm:text-[14px] font-black uppercase tracking-wider text-stone-900 border-b-2 border-stone-300">
-                        <th className="pb-2 font-black text-left">ITEM</th>
-                        <th className="pb-2 font-black text-center w-12">QTY</th>
-                        <th className="pb-2 font-black text-right w-20">PRICE</th>
-                        <th className="pb-2 font-black text-right w-24">AMOUNT</th>
+                      <tr className="text-xs sm:text-[13px] font-bold uppercase tracking-wider text-stone-800 border-b border-stone-300">
+                        <th className="pb-2 font-bold text-left">ITEM</th>
+                        <th className="pb-2 font-bold text-center w-12">QTY</th>
+                        <th className="pb-2 font-bold text-right w-20">PRICE</th>
+                        <th className="pb-2 font-bold text-right w-24">AMOUNT</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-stone-200/70">
+                    <tbody className="divide-y divide-stone-100">
                       {order.items.map((i: CartItem) => (
-                        <tr key={i.id} className="text-stone-900 text-[14.5px] sm:text-base">
-                          <td className="py-2.5 pr-2 font-bold leading-snug">{i.name}</td>
-                          <td className="py-2.5 text-center font-black text-stone-900">{i.quantity}</td>
-                          <td className="py-2.5 text-right font-medium text-stone-700">{i.price.toFixed(2)}</td>
-                          <td className="py-2.5 text-right font-black text-stone-900">₹{(i.price * i.quantity).toFixed(2)}</td>
+                        <tr key={i.id} className="text-stone-900 text-sm sm:text-[14.5px]">
+                          <td className="py-2.5 pr-2 font-medium leading-snug text-stone-900">{i.name}</td>
+                          <td className="py-2.5 text-center font-normal text-stone-600">{i.quantity}</td>
+                          <td className="py-2.5 text-right font-normal text-stone-600">{i.price.toFixed(2)}</td>
+                          <td className="py-2.5 text-right font-bold text-stone-900">₹{(i.price * i.quantity).toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -164,39 +164,39 @@ export default function ReceiptPreviewModal() {
                 </div>
 
                 {/* Dashed Divider */}
-                <div className="border-b-2 border-dashed border-stone-400 my-4"></div>
+                <div className="border-b border-dashed border-stone-300 my-3.5"></div>
 
                 {/* Subtotal, GST & Total */}
-                <div className="py-1 space-y-1.5">
-                  <div className="flex justify-between text-[15px] sm:text-base font-bold text-stone-800">
-                    <span className="ml-auto pr-8">Subtotal</span>
-                    <span className="w-28 text-right font-black">₹{order.subtotal.toFixed(2)}</span>
+                <div className="py-1 space-y-1">
+                  <div className="flex justify-between text-sm sm:text-[14px]">
+                    <span className="ml-auto pr-8 font-normal text-stone-500">Subtotal</span>
+                    <span className="w-28 text-right font-medium text-stone-900">₹{order.subtotal.toFixed(2)}</span>
                   </div>
                   {settings.gstPercentage > 0 && order.gstAmount > 0 && (
-                    <div className="flex justify-between text-[15px] sm:text-base font-bold text-stone-800">
-                      <span className="ml-auto pr-8">GST ({settings.gstPercentage}%)</span>
-                      <span className="w-28 text-right font-black">₹{order.gstAmount.toFixed(2)}</span>
+                    <div className="flex justify-between text-sm sm:text-[14px]">
+                      <span className="ml-auto pr-8 font-normal text-stone-500">GST ({settings.gstPercentage}%)</span>
+                      <span className="w-28 text-right font-medium text-stone-900">₹{order.gstAmount.toFixed(2)}</span>
                     </div>
                   )}
-                  <div className="border-b-2 border-stone-900 my-3"></div>
+                  <div className="border-b border-stone-800 my-2.5"></div>
                   <div className="flex justify-between items-baseline text-stone-900 pt-1">
-                    <span className="ml-auto pr-8 text-xl sm:text-2xl font-black tracking-tight">TOTAL</span>
-                    <span className="w-36 text-right text-2xl sm:text-3xl font-black tracking-tight">₹{order.total.toFixed(2)}</span>
+                    <span className="ml-auto pr-8 text-lg sm:text-xl font-bold tracking-tight text-stone-900">TOTAL</span>
+                    <span className="w-36 text-right text-2xl sm:text-[27px] font-extrabold tracking-tight text-stone-900">₹{order.total.toFixed(2)}</span>
                   </div>
                 </div>
 
                 {/* Solid Divider */}
-                <div className="border-b-2 border-stone-900 my-4"></div>
+                <div className="border-b border-stone-800 my-3.5"></div>
 
-                {/* Bottom Bar: Centered Payment Pill (Feedback & Scanner Removed) */}
+                {/* Bottom Bar: Centered Payment Pill (Light-bold / bold border) */}
                 <div className="flex items-center justify-center pt-1">
-                  <div className="inline-flex items-center px-5 py-2 rounded-full border-2 border-stone-900 text-xs sm:text-sm font-black uppercase tracking-wider text-stone-900 bg-transparent">
+                  <div className="inline-flex items-center px-4 py-1.5 rounded-full border border-stone-800 text-xs sm:text-[12.5px] font-bold uppercase tracking-wider text-stone-900 bg-transparent">
                     PAID VIA {order.paymentType || 'UPI'}
                   </div>
                 </div>
 
-                {/* Centered Footer Message */}
-                <p className="text-center text-xs sm:text-[13px] font-bold uppercase tracking-wider text-stone-800 mt-5 leading-normal">
+                {/* Centered Footer Message (Light / Medium) */}
+                <p className="text-center text-xs sm:text-[12px] font-medium uppercase tracking-wider text-stone-500 mt-4 leading-normal">
                   {settings.footerMessage || 'NO BRANCHES • THANK YOU FOR CHOOSING VETRIVEL UNAVAGAM'}
                 </p>
               </div>

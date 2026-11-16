@@ -2469,29 +2469,57 @@ function ReceiptPreviewModal() {
   return (
     <div className="fixed inset-0 z-200 flex items-center justify-center sm:p-6 bg-slate-950/70 backdrop-blur-md print:p-0 print:m-0 print:bg-transparent print:block print:static print:inset-auto print:h-auto print:w-full print:overflow-visible">
       <style>{`@media print { 
-  @page { size: auto; margin: 0mm !important; } 
+  @page { 
+    size: auto; 
+    margin: 0mm !important; 
+  } 
+  *, *:before, *:after {
+    animation: none !important;
+    transition: none !important;
+    filter: none !important;
+  }
   html, body { 
-    margin: 0 !important; 
-    padding: 0 !important; 
-    background: white !important; 
+    margin: 0mm !important; 
+    padding: 0mm !important; 
+    background: #ffffff !important; 
     color: #000000 !important; 
     -webkit-print-color-adjust: exact !important; 
     print-color-adjust: exact !important; 
     height: auto !important;
+    min-height: 0 !important;
     overflow: visible !important;
   }
+  body * {
+    visibility: hidden !important;
+  }
+  #print-area,
+  #print-area * {
+    visibility: visible !important;
+  }
   #print-area { 
-    margin: 0 auto !important; 
-    padding: 1mm 2mm 3mm 2mm !important; 
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    margin: 0 !important; 
+    padding: 0mm 1mm 2mm 1mm !important; 
     box-shadow: none !important; 
     border: none !important; 
-    background: white !important; 
+    border-radius: 0 !important;
+    background: #ffffff !important; 
     color: #000000 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     width: 100% !important;
     max-width: 100% !important;
+    transform: none !important;
+    float: none !important;
   } 
+  #print-area > div:first-child,
+  #print-area h1:first-child {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+  }
 }`}</style>
 
       <div className="bg-white dark:bg-slate-900 w-full max-w-4xl sm:rounded-[2.5rem] shadow-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden flex flex-col md:flex-row h-full sm:h-[90vh] print:h-auto print:block print:border-none print:shadow-none animate-scale-up print:overflow-visible">
@@ -2805,10 +2833,10 @@ function ReceiptPreviewModal() {
               id="print-area" 
               className={`transition-all select-none print:select-auto ${
                 format === 'thermal'
-                  ? 'w-full max-w-105 sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
+                  ? 'w-full max-w-105 sm:w-[100mm] p-6 sm:p-8 print:p-0 print:m-0 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
                   : format === 'kot'
-                  ? 'w-full max-w-105 sm:w-[100mm] p-6 sm:p-8 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
-                  : 'w-full max-w-[210mm] min-h-[297mm] p-10 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
+                  ? 'w-full max-w-105 sm:w-[100mm] p-6 sm:p-8 print:p-0 print:m-0 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
+                  : 'w-full max-w-[210mm] min-h-[297mm] p-10 print:p-4 bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-300 text-black font-sans'
               }`}
             >
             {/* THERMAL ROLL FORMAT — Crisp, High-Contrast Dark Text */}

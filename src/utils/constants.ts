@@ -77,3 +77,29 @@ export const seedOrders: Order[] = [
   { id: 'T-1', billNumber: 'POS-1001', customerName: 'Rahul', customerPhone: '9845123456', billType: 'Dine-In', paymentType: 'UPI', date: getPastDate(1), time: '12:30 PM', items: [{ id: 'm5', name: 'Chicken Biryani', price: 250, quantity: 2, category: 'Rice', isAvailable: true }], subtotal: 500, gstAmount: 25, total: 525 },
   { id: 'T-2', billNumber: 'POS-1002', customerName: 'Sneha', customerPhone: '9876501234', billType: 'Parcel', paymentType: 'Cash', date: getPastDate(0), time: '08:15 PM', items: [{ id: 'm1', name: 'Butter Chicken', price: 280, quantity: 1, category: 'Main Course', isAvailable: true }, { id: 'm3', name: 'Garlic Naan', price: 50, quantity: 3, category: 'Breads', isAvailable: true }], subtotal: 430, gstAmount: 21.5, total: 451.5 },
 ];
+
+export const format12HourTime = (timeStr?: string): string => {
+  if (!timeStr) return '';
+  const trimmed = timeStr.trim();
+  // Check if it already has AM/PM
+  const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM|am|pm)$/i);
+  if (ampmMatch) {
+    const hours = parseInt(ampmMatch[1], 10);
+    const minutes = ampmMatch[2];
+    const ampm = ampmMatch[3].toUpperCase();
+    const strHours = String(hours).padStart(2, '0');
+    return `${strHours}:${minutes} ${ampm}`;
+  }
+  // Check 24-hr railway format e.g. "15:46" or "15:46:30" or "9:05"
+  const match24 = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (match24) {
+    let hours = parseInt(match24[1], 10);
+    const minutes = match24[2];
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    if (hours === 0) hours = 12;
+    const strHours = String(hours).padStart(2, '0');
+    return `${strHours}:${minutes} ${ampm}`;
+  }
+  return trimmed;
+};

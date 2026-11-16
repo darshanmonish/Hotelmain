@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Printer, Edit, Plus, Minus, Trash2, ShoppingCart, Check, X } from 'lucide-react';
 import { useAppContext } from '@/contexts/AppContext';
 import type { Settings, CartItem, Order } from '@/types';
+import { format12HourTime } from '@/utils/constants';
 
 export default function ReceiptPreviewModal() {
   const context = useAppContext();
@@ -500,14 +501,12 @@ export default function ReceiptPreviewModal() {
                       </div>
                     </div>
 
-                    <div className="space-y-1 text-right">
-                      <div className="flex justify-end gap-2">
+                    <div className="text-right shrink-0">
+                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap text-xs sm:text-[13.5px]">
                         <span className="font-semibold text-stone-800">Date:</span>
                         <span className="font-bold text-black">{order.date}</span>
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        <span className="font-semibold text-stone-800">Time:</span>
-                        <span className="font-bold text-black">{order.time}</span>
+                        <span className="font-semibold text-stone-800 ml-1.5">Time:</span>
+                        <span className="font-bold text-black">{format12HourTime(order.time)}</span>
                       </div>
                     </div>
                   </div>
@@ -605,7 +604,7 @@ export default function ReceiptPreviewModal() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-1">Invoice Details</p>
-                    <p className="font-bold text-stone-900">{order.date} &bull; {order.time}</p>
+                    <p className="font-bold text-stone-900">{order.date} &bull; {format12HourTime(order.time)}</p>
                     <p className="font-bold mt-2 bg-white border border-stone-300 inline-block px-3 py-1 rounded-md text-xs">
                       PAID VIA {order.paymentType}
                     </p>
@@ -677,7 +676,7 @@ export default function ReceiptPreviewModal() {
                 <div className="py-3 border-b-2 border-stone-900 text-xs font-bold">
                   <div className="flex justify-between">
                     <span>Order: #{order.billNumber}</span>
-                    <span>{order.time}</span>
+                    <span>{format12HourTime(order.time)}</span>
                   </div>
                   <div className="mt-1 text-sm font-black">
                     Table: {order.tableNumber ? `Table ${order.tableNumber} (Type ${String.fromCharCode(64 + order.tableNumber)})` : 'Counter'}

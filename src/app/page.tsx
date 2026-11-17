@@ -7,7 +7,7 @@ import {
   LogOut, Sun, Moon, Plus, Minus, Search, Trash2, Printer, Download, 
   Edit, Check, X, Lock, User as UserIcon, Coins, IndianRupee,
   ShoppingCart, ChevronRight, PlusCircle, Menu as MenuIcon,
-  MapPin, CreditCard, Activity, Star, Eye, EyeOff, Loader2, LayoutGrid
+  MapPin, CreditCard, Activity, Star, Eye, EyeOff, Loader2, LayoutGrid, Tag
 } from 'lucide-react';
 
 import { supabase } from '@/utils/supabaseClient';
@@ -1862,6 +1862,9 @@ function OrdersView() {
   );
 }
 
+const DEFAULT_MENU_CATEGORIES = ['Main Course', 'Starters', 'Breads', 'Rice', 'Beverages', 'Desserts'];
+const CATEGORY_STORAGE_KEY = 'shbs_menu_categories';
+
 function MenuView() {
   const context = useAppContext();
   const { menu, addMenuItem, updateMenuItem, deleteMenuItem, toggleAvailability, showToast } = context;
@@ -1878,6 +1881,21 @@ function MenuView() {
   const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null);
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('All');
+  const [categoryPrefs, setCategoryPrefs] = useState<{ added: string[]; removed: string[] }>(() => {
+    try {
+      const raw = localStorage.getItem(CATEGORY_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed?.added) && Array.isArray(parsed?.removed)) {
+          return { added: parsed.added, removed: parsed.removed };
+        }
+      }
+    } catch { /* ignore malformed category storage */ }
+    return { added: [], removed: [] };
+  });
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryError, setCategoryError] = useState('');
+  const categoryInputRef = useRef<HTMLInputElement>(null);
   const [formState, setFormState] = useState<MenuFormState>({
     name: '', 
     price: '', 
@@ -1891,8 +1909,92 @@ function MenuView() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const activeMenu = useMemo(() => menu.filter((m: MenuItem) => !m.isDeleted), [menu]);
-  const categories = useMemo(() => ['All', ...Array.from(new Set(activeMenu.map((m: MenuItem) => m.category)))], [activeMenu]);
-  const filteredMenu = useMemo(() => activeMenu.filter((m: MenuItem) => m.name.toLowerCase().includes(search.toLowerCase()) && (cat === 'All' || m.category === cat)), [activeMenu, search, cat]);
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    activeMenu.forEach((m: MenuItem) => {
+      const name = m.category.trim();
+      if (name) counts[name] = (counts[name] || 0) + 1;
+    });
+    return counts;
+  }, [activeMenu]);
+  const managedCategories = useMemo(() => {
+    const removedSet = new Set(categoryPrefs.removed.map(c => c.toLowerCase()));
+    const seen = new Set<string>();
+    const list: string[] = [];
+    const pushUnique = (name: string) => {
+      const trimmed = name.trim();
+      if (trimmed && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        list.push(trimmed);
+      }
+    };
+    DEFAULT_MENU_CATEGORIES.forEach(c => {
+      if (!removedSet.has(c.toLowerCase())) pushUnique(c);
+    });
+    categoryPrefs.added.forEach(pushUnique);
+    activeMenu.forEach((m: MenuItem) => pushUnique(m.category));
+    return list;
+  }, [categoryPrefs, activeMenu]);
+  const categories = useMemo(() => ['All', ...managedCategories], [managedCategories]);
+  const filteredMenu = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return activeMenu.filter((m: MenuItem) => (
+      (!q || m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q)) &&
+      (cat === 'All' || m.category.trim() === cat)
+    ));
+  }, [activeMenu, search, cat]);
+
+  const saveCategoryPrefs = (next: { added: string[]; removed: string[] }) => {
+    setCategoryPrefs(next);
+    try {
+      localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(next));
+    } catch { /* ignore storage quota errors */ }
+  };
+
+  const handleAddCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    const normalized = newCategoryName.trim().replace(/\s+/g, ' ');
+    if (!normalized) {
+      setCategoryError('Please enter a category name');
+      showToast('Please enter a category name', 'error');
+      categoryInputRef.current?.focus();
+      return;
+    }
+    const key = normalized.toLowerCase();
+    if (managedCategories.some(c => c.toLowerCase() === key)) {
+      setCategoryError('Category already exists');
+      showToast('Category already exists', 'warning');
+      categoryInputRef.current?.focus();
+      return;
+    }
+    const isDefault = DEFAULT_MENU_CATEGORIES.some(c => c.toLowerCase() === key);
+    const nextRemoved = categoryPrefs.removed.filter(c => c.toLowerCase() !== key);
+    const nextAdded = isDefault ? categoryPrefs.added : [...categoryPrefs.added, normalized];
+    saveCategoryPrefs({ added: nextAdded, removed: nextRemoved });
+    setNewCategoryName('');
+    setCategoryError('');
+    showToast(`Category "${normalized}" added`, 'success');
+  };
+
+  const handleDeleteCategory = (name: string) => {
+    if ((categoryCounts[name] || 0) > 0) {
+      showToast('Move or delete dishes in this category first', 'warning');
+      return;
+    }
+    const key = name.toLowerCase();
+    const nextAdded = categoryPrefs.added.filter(c => c.toLowerCase() !== key);
+    const isDefault = DEFAULT_MENU_CATEGORIES.some(c => c.toLowerCase() === key);
+    const nextRemoved = isDefault && !categoryPrefs.removed.some(c => c.toLowerCase() === key)
+      ? [...categoryPrefs.removed, name]
+      : categoryPrefs.removed;
+    saveCategoryPrefs({ added: nextAdded, removed: nextRemoved });
+    if (cat === name) setCat('All');
+    if (formState.category === name) {
+      const fallback = managedCategories.find(c => c !== name) || '';
+      setFormState(prev => ({ ...prev, category: fallback }));
+    }
+    showToast(`Category "${name}" removed`, 'info');
+  };
 
   const openModal = (item: MenuItem | null = null) => {
     if (item) {
@@ -1900,7 +2002,7 @@ function MenuView() {
       setFormState({
         name: item.name,
         price: item.price.toString(),
-        category: item.category,
+        category: item.category.trim(),
         isAvailable: item.isAvailable,
         imageUrl: item.imageUrl || '',
         description: item.description || '',
@@ -1912,7 +2014,7 @@ function MenuView() {
       setFormState({
         name: '',
         price: '',
-        category: 'Main Course',
+        category: cat !== 'All' ? cat : (managedCategories[0] || 'Main Course'),
         isAvailable: true,
         imageUrl: '',
         description: '',
@@ -1945,6 +2047,10 @@ function MenuView() {
 
     if (!formState.name.trim()) {
       showToast('Please enter a dish name', 'error');
+      return;
+    }
+    if (!formState.category.trim()) {
+      showToast('Please select a category', 'error');
       return;
     }
     if (!formState.price || parseFloat(formState.price) <= 0) {
@@ -2001,8 +2107,117 @@ function MenuView() {
           <h2 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight">Menu Master</h2>
           <p className="text-sm font-medium text-slate-500 mt-1">Manage your food catalog and availability</p>
         </div>
-        <button onClick={()=>openModal()} className="bg-violet-600 text-white px-6 py-3.5 rounded-2xl font-bold text-sm shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2 hover:bg-violet-700 hover:-translate-y-0.5 transition-all active:scale-95 shrink-0"><PlusCircle size={20}/> Add New Dish</button>
+        <button type="button" onClick={()=>openModal()} className="bg-violet-600 text-white px-6 py-3.5 rounded-2xl font-bold text-sm shadow-lg shadow-violet-500/20 flex items-center justify-center gap-2 hover:bg-violet-700 hover:-translate-y-0.5 transition-all active:scale-95 shrink-0"><PlusCircle size={20}/> Add New Dish</button>
       </div>
+
+      {/* Categories Section */}
+      <section aria-labelledby="categories-heading" className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/60 dark:border-slate-700 p-4 sm:p-5 soft-shadow animate-pop-in space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 flex items-center justify-center">
+                <Tag size={16} />
+              </div>
+              <h3 id="categories-heading" className="text-base sm:text-lg font-extrabold text-slate-800 dark:text-white tracking-tight">Categories</h3>
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-300">
+                {managedCategories.length}
+              </span>
+            </div>
+            <p className="text-xs font-medium text-slate-500 mt-1">Add menu categories and filter dishes by section</p>
+          </div>
+
+          <form onSubmit={handleAddCategory} aria-labelledby="categories-heading" className="w-full lg:w-auto space-y-1.5" noValidate>
+            <label htmlFor="new-category-input" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
+              Add Category <span aria-hidden="true" className="text-rose-500">*</span>
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2.5">
+              <input
+                ref={categoryInputRef}
+                id="new-category-input"
+                name="categoryName"
+                type="text"
+                required
+                maxLength={40}
+                enterKeyHint="done"
+                placeholder="e.g. South Indian, Tiffin"
+                value={newCategoryName}
+                aria-invalid={categoryError ? 'true' : undefined}
+                aria-describedby={categoryError ? 'new-category-error' : undefined}
+                onChange={(e) => {
+                  setNewCategoryName(e.target.value);
+                  if (categoryError) setCategoryError('');
+                }}
+                className={`w-full sm:w-64 bg-slate-50 dark:bg-slate-900 border ${categoryError ? 'border-rose-400 focus:ring-rose-500/20' : 'border-slate-200 dark:border-slate-700 focus:border-violet-500 focus:ring-violet-500/10'} rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-4 transition-all placeholder:text-slate-400 min-h-12`}
+              />
+              <button
+                type="submit"
+                className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md shadow-violet-500/20 flex items-center justify-center gap-1.5 transition-all active:scale-95 shrink-0 cursor-pointer min-h-12"
+              >
+                <Plus size={16} /> Add Category
+              </button>
+            </div>
+            {categoryError && (
+              <p id="new-category-error" role="status" aria-live="polite" className="text-xs font-semibold text-rose-500 ml-1">
+                {categoryError}
+              </p>
+            )}
+          </form>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-700/60">
+          <button
+            type="button"
+            onClick={() => setCat('All')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              cat === 'All'
+                ? 'bg-violet-600 text-white shadow-sm shadow-violet-500/20'
+                : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+            }`}
+          >
+            <span>All</span>
+            <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${cat === 'All' ? 'bg-white/20 text-white' : 'bg-slate-200/70 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+              {activeMenu.length}
+            </span>
+          </button>
+
+          {managedCategories.map((c: string) => {
+            const count = categoryCounts[c] || 0;
+            const isActive = cat === c;
+            return (
+              <div
+                key={c}
+                className={`inline-flex items-center rounded-xl border transition-all ${
+                  isActive
+                    ? 'bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-500/20'
+                    : 'bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200/60 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setCat(c)}
+                  className="px-3.5 py-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>{c}</span>
+                  <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200/70 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                    {count}
+                  </span>
+                </button>
+                {count === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteCategory(c)}
+                    aria-label={`Remove ${c} category`}
+                    title="Remove empty category"
+                    className={`pr-2.5 pl-1 py-2 transition-colors cursor-pointer ${isActive ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-rose-500'}`}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {/* Sticky Search & Filter Bar - Follows the screen as you scroll anywhere in the catalog */}
       <div className="sticky top-0 z-30 pt-1 pb-3 bg-[#F8FAFC]/95 dark:bg-slate-900/95 backdrop-blur-md transition-all">
@@ -2029,6 +2244,7 @@ function MenuView() {
           </div>
           <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-2.5 px-2 pb-1 sm:pb-0">
             <select 
+              aria-label="Filter by category"
               value={cat} 
               onChange={e=>setCat(e.target.value)} 
               className="bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold outline-none cursor-pointer text-slate-700 dark:text-slate-300"
@@ -2039,6 +2255,7 @@ function MenuView() {
               {filteredMenu.length} dishes
             </span>
             <button 
+              type="button"
               onClick={()=>openModal()} 
               className="hidden lg:flex bg-violet-600 text-white px-3.5 py-2 rounded-xl font-bold text-xs shadow-md shadow-violet-500/20 items-center gap-1.5 hover:bg-violet-700 transition-all active:scale-95 shrink-0 cursor-pointer"
               title="Add New Dish"
@@ -2056,9 +2273,9 @@ function MenuView() {
           </div>
           <h3 className="text-2xl font-extrabold text-slate-800 dark:text-white mb-2">{activeMenu.length === 0 ? 'No dishes yet' : 'No dishes found'}</h3>
           <p className="text-slate-500 text-sm font-medium mb-8 max-w-xs text-center">{activeMenu.length === 0 ? 'Start building your menu by adding your first dish to the catalog.' : 'Try adjusting your search or category filter.'}</p>
-          {activeMenu.length === 0 && (
-            <button onClick={() => openModal()} className="bg-violet-600 text-white px-8 py-3.5 rounded-2xl font-bold text-sm hover:bg-violet-700 transition-all shadow-lg shadow-violet-500/20 flex items-center gap-2">
-              <PlusCircle size={18}/> Add Your First Dish
+          {(activeMenu.length === 0 || (cat !== 'All' && !search)) && (
+            <button type="button" onClick={() => openModal()} className="bg-violet-600 text-white px-8 py-3.5 rounded-2xl font-bold text-sm hover:bg-violet-700 transition-all shadow-lg shadow-violet-500/20 flex items-center gap-2">
+              <PlusCircle size={18}/> {activeMenu.length === 0 ? 'Add Your First Dish' : `Add Dish to ${cat}`}
             </button>
           )}
         </div>
@@ -2180,9 +2397,11 @@ function MenuView() {
 
                     <div className="grid grid-cols-2 gap-5">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Category <span className="text-rose-500">*</span></label>
-                        <select value={formState.category} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setFormState({...formState,category:e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3.5 text-sm font-bold outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-500 transition-all dark:text-white appearance-none cursor-pointer shadow-sm">
-                          <option>Main Course</option><option>Starters</option><option>Breads</option><option>Rice</option><option>Beverages</option><option>Desserts</option>
+                        <label htmlFor="dish-category" className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Category <span className="text-rose-500">*</span></label>
+                        <select id="dish-category" name="category" required value={formState.category} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setFormState({...formState,category:e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3.5 text-sm font-bold outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-500 transition-all dark:text-white appearance-none cursor-pointer shadow-sm">
+                          {managedCategories.length === 0 && <option value="">Select a category</option>}
+                          {managedCategories.map((c: string) => <option key={c} value={c}>{c}</option>)}
+                          {formState.category && !managedCategories.includes(formState.category) && <option value={formState.category}>{formState.category}</option>}
                         </select>
                       </div>
                       <div className="space-y-2">
